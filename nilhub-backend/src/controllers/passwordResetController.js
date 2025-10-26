@@ -5,8 +5,11 @@ const bcrypt = require('bcryptjs');
 const { enviarCodigoRecuperacion, enviarConfirmacionCambio } = require('../services/emailService');
 
 /**
- * Función helper para normalizar emails consistentemente
- * Solo lowercase + trim (respeta puntos y símbolos)
+ * @description Normaliza emails de forma consistente (lowercase + trim)
+ * Respeta puntos y caracteres especiales (importante para Gmail)
+ * @param {string} email - Email a normalizar
+ * @returns {string} Email normalizado
+ * @private
  */
 const normalizarEmail = (email) => {
   if (!email) return '';
@@ -14,15 +17,27 @@ const normalizarEmail = (email) => {
 };
 
 /**
- * Generar código aleatorio de 6 dígitos
+ * @description Genera un código aleatorio de 6 dígitos
+ * @returns {string} Código de 6 dígitos
+ * @private
  */
 const generarCodigo = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 /**
- * POST /api/auth/forgot-password
- * Solicitar código de recuperación
+ * @route   POST /api/auth/forgot-password
+ * @desc    Solicita un código de recuperación de contraseña
+ * @access  Public
+ * 
+ * @param {Object} req.body
+ * @param {string} req.body.email - Email del usuario
+ * @param {string} req.body.metodo - Método de envío: 'email' o 'whatsapp'
+ * 
+ * @returns {Object} 200 - Código enviado (no revela si el email existe)
+ * @returns {Object} 400 - Validación fallida
+ * @returns {Object} 429 - Rate limit (ya solicitó hace menos de 5 min)
+ * @returns {Object} 500 - Error del servidor
  */
 const solicitarRecuperacion = async (req, res) => {
   try {
@@ -50,7 +65,7 @@ const solicitarRecuperacion = async (req, res) => {
     const usuario = await Usuario.findOne({ email: emailNormalizado });
 
     if (!usuario) {
-      // Por seguridad, no revelamos si el email existe o no
+      // 🔒 SEGURIDAD: No revelar si el email existe
       console.log(`⚠️ EMAIL NO ENCONTRADO: ${email} (normalizado: ${emailNormalizado})`);
       return res.status(200).json({
         success: true,
@@ -58,7 +73,7 @@ const solicitarRecuperacion = async (req, res) => {
       });
     }
 
-    // Verificar si ya hay una solicitud reciente (últimos 5 minutos)
+    // Verificar rate limit (últimos 5 minutos)
     const solicitudReciente = await PasswordReset.findOne({
       email: emailNormalizado,
       createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
@@ -71,7 +86,7 @@ const solicitarRecuperacion = async (req, res) => {
       });
     }
 
-    // Generar código
+    // Generar código de 6 dígitos
     const code = generarCodigo();
 
     // Crear registro de reset
@@ -85,7 +100,7 @@ const solicitarRecuperacion = async (req, res) => {
 
     await passwordReset.save();
 
-    // MOSTRAR CÓDIGO EN CONSOLA (SIEMPRE - para desarrollo)
+    // 🖥️ MOSTRAR CÓDIGO EN CONSOLA (útil para desarrollo)
     console.log('');
     console.log('╔═══════════════════════════════════════════╗');
     console.log('║     🔐 CÓDIGO DE RECUPERACIÓN            ║');
@@ -97,21 +112,21 @@ const solicitarRecuperacion = async (req, res) => {
     console.log(`  ⏰ Expira: ${passwordReset.expira.toLocaleString('es-PE')}`);
     console.log('');
 
-    // 🔥 ENVIAR EMAIL SI EL MÉTODO ES EMAIL
+    // 📧 ENVIAR EMAIL
     if (metodo === 'email') {
       try {
         await enviarCodigoRecuperacion(usuario.email, usuario.nombre, code);
         console.log('✅ Email enviado exitosamente a:', usuario.email);
       } catch (emailError) {
         console.error('❌ Error al enviar email:', emailError.message);
-        // No lanzar error - el código ya está guardado y mostrado en consola
+        // No fallar - el código ya está guardado y en consola
       }
     }
 
-    // 📲 ENVIAR WHATSAPP SI EL MÉTODO ES WHATSAPP (futuro)
+    // 📲 ENVIAR WHATSAPP (futuro)
     if (metodo === 'whatsapp') {
       console.log('📲 WhatsApp: Integración pendiente (Twilio API)');
-      // TODO: Implementar envío por WhatsApp con Twilio
+      // TODO: Implementar con Twilio
     }
 
     return res.status(200).json({
@@ -119,8 +134,8 @@ const solicitarRecuperacion = async (req, res) => {
       message: metodo === 'email' 
         ? `Código enviado a ${email}. Revisa tu bandeja de entrada.` 
         : 'Código generado. Revisa la consola del servidor.',
-      // ⚠️ SOLO EN DESARROLLO - Mostrar código en respuesta
-      code: process.env.NODE_ENV === 'development' ? code : undefined
+      // ⚠️ SOLO EN DESARROLLO
+      ...(process.env.NODE_ENV === 'development' && { code })
     });
 
   } catch (error) {
@@ -133,13 +148,23 @@ const solicitarRecuperacion = async (req, res) => {
 };
 
 /**
- * POST /api/auth/verify-reset-code
- * Verificar que el código es válido
+ * @route   POST /api/auth/verify-reset-code
+ * @desc    Verifica que un código de recuperación sea válido
+ * @access  Public
+ * 
+ * @param {Object} req.body
+ * @param {string} req.body.email - Email del usuario
+ * @param {string} req.body.code - Código de 6 dígitos
+ * 
+ * @returns {Object} 200 - Código válido
+ * @returns {Object} 400 - Código inválido, usado, expirado o sin intentos
+ * @returns {Object} 500 - Error del servidor
  */
 const verificarCodigo = async (req, res) => {
   try {
     const { email, code } = req.body;
 
+    // Validaciones
     if (!email || !code) {
       return res.status(400).json({
         success: false,
@@ -163,7 +188,7 @@ const verificarCodigo = async (req, res) => {
       });
     }
 
-    // Verificar si es válido
+    // Verificar validez (no usado, < 3 intentos, no expirado)
     if (!passwordReset.esValido()) {
       let mensaje = 'Código inválido o expirado';
       
@@ -199,8 +224,19 @@ const verificarCodigo = async (req, res) => {
 };
 
 /**
- * POST /api/auth/reset-password
- * Cambiar la contraseña usando el código
+ * @route   POST /api/auth/reset-password
+ * @desc    Cambia la contraseña usando un código válido
+ * @access  Public
+ * 
+ * @param {Object} req.body
+ * @param {string} req.body.email - Email del usuario
+ * @param {string} req.body.code - Código de 6 dígitos
+ * @param {string} req.body.nuevaPassword - Nueva contraseña (min 6 caracteres)
+ * 
+ * @returns {Object} 200 - Contraseña actualizada
+ * @returns {Object} 400 - Validación fallida o código inválido
+ * @returns {Object} 404 - Usuario no encontrado
+ * @returns {Object} 500 - Error del servidor
  */
 const resetPassword = async (req, res) => {
   try {
@@ -252,7 +288,7 @@ const resetPassword = async (req, res) => {
     const passwordHash = await bcrypt.hash(nuevaPassword, salt);
 
     // ⚠️ IMPORTANTE: Usar updateOne para BYPASS del middleware pre-save
-    // Esto evita que se hashee dos veces
+    // Esto evita doble hashing
     await Usuario.updateOne(
       { _id: usuario._id },
       { $set: { password: passwordHash } }
@@ -269,7 +305,7 @@ const resetPassword = async (req, res) => {
       console.log('✅ Email de confirmación enviado');
     } catch (emailError) {
       console.error('⚠️ No se pudo enviar email de confirmación:', emailError.message);
-      // No lanzar error - la contraseña ya se cambió exitosamente
+      // No fallar - la contraseña ya se cambió
     }
 
     return res.status(200).json({

@@ -1,3 +1,4 @@
+// fronted/src/types/index.ts
 export interface Usuario {
   _id: string;
   email: string;

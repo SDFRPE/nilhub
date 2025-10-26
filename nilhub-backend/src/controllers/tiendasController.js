@@ -1,17 +1,19 @@
 // backend/src/controllers/tiendasController.js
 const Tienda = require('../models/Tienda');
-const Usuario = require('../models/Usuario');
+const Producto = require('../models/Producto');
 
 /**
- * GET /api/tiendas/:slug
- * Obtener tienda pública por slug
+ * @route   GET /api/tiendas/:slug
+ * @desc    Obtiene tienda pública por slug (catálogo)
+ * @access  Public
  */
 const obtenerTiendaPorSlug = async (req, res) => {
   try {
     const { slug } = req.params;
 
     const tienda = await Tienda.findOne({ slug, activa: true })
-      .populate('usuario_id', 'nombre email');
+      .populate('usuario_id', 'nombre email')
+      .lean();
 
     if (!tienda) {
       return res.status(404).json({
@@ -20,13 +22,10 @@ const obtenerTiendaPorSlug = async (req, res) => {
       });
     }
 
-    // Incrementar visitas
-    tienda.total_visitas = (tienda.total_visitas || 0) + 1;
-    await tienda.save();
-
+    // ✅ FIX: Devolver tienda directamente
     res.status(200).json({
       success: true,
-      tienda
+      data: tienda
     });
 
   } catch (error) {
@@ -39,8 +38,73 @@ const obtenerTiendaPorSlug = async (req, res) => {
 };
 
 /**
- * GET /api/tiendas/mi-tienda
- * Obtener MI tienda (usuario autenticado)
+ * @route   GET /api/tiendas/:slug/productos
+ * @desc    Obtiene todos los productos de una tienda (catálogo público)
+ * @access  Public
+ */
+const obtenerProductosDeTienda = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { categoria, buscar } = req.query;
+
+    // Buscar tienda
+    const tienda = await Tienda.findOne({ slug, activa: true }).lean();
+
+    if (!tienda) {
+      return res.status(404).json({
+        success: false,
+        error: 'Tienda no encontrada'
+      });
+    }
+
+    // Query base
+    const query = {
+      tienda_id: tienda._id,
+      activo: true
+    };
+
+    // Filtrar por categoría
+    if (categoria && categoria !== 'todas') {
+      query.categoria = categoria;
+    }
+
+    // Buscar por texto
+    if (buscar) {
+      query.$or = [
+        { nombre: { $regex: buscar, $options: 'i' } },
+        { descripcion: { $regex: buscar, $options: 'i' } },
+        { marca: { $regex: buscar, $options: 'i' } }
+      ];
+    }
+
+    // Obtener productos
+    const productos = await Producto.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ✅ Mantener formato: devolver objeto con tienda y productos
+    res.status(200).json({
+      success: true,
+      data: {
+        tienda,
+        productos,
+        total: productos.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error en obtenerProductosDeTienda:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener productos'
+    });
+  }
+};
+
+/**
+ * @route   GET /api/tiendas/mi-tienda
+ * @desc    Obtiene la tienda del usuario autenticado
+ * @access  Private
  */
 const obtenerMiTienda = async (req, res) => {
   try {
@@ -53,9 +117,10 @@ const obtenerMiTienda = async (req, res) => {
       });
     }
 
+    // ✅ Devolver tienda directamente
     res.status(200).json({
       success: true,
-      tienda
+      data: tienda
     });
 
   } catch (error) {
@@ -68,14 +133,21 @@ const obtenerMiTienda = async (req, res) => {
 };
 
 /**
- * POST /api/tiendas
- * Crear nueva tienda
+ * @route   POST /api/tiendas
+ * @desc    Crea una nueva tienda
+ * @access  Private
  */
 const crearTienda = async (req, res) => {
   try {
     const { nombre, descripcion, whatsapp, instagram, facebook } = req.body;
 
-    // Verificar que el usuario no tenga ya una tienda
+    if (!nombre || !whatsapp) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nombre y WhatsApp son obligatorios'
+      });
+    }
+
     const tiendaExistente = await Tienda.findOne({ usuario_id: req.usuario._id });
 
     if (tiendaExistente) {
@@ -85,27 +157,9 @@ const crearTienda = async (req, res) => {
       });
     }
 
-    // Generar slug único
-    let slug = nombre
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-
-    // Verificar que el slug sea único
-    let slugExiste = await Tienda.findOne({ slug });
-    let contador = 1;
-    
-    while (slugExiste) {
-      slug = `${slug}-${contador}`;
-      slugExiste = await Tienda.findOne({ slug });
-      contador++;
-    }
-
-    // Crear tienda
     const tienda = new Tienda({
       usuario_id: req.usuario._id,
       nombre,
-      slug,
       descripcion,
       whatsapp,
       instagram,
@@ -115,13 +169,25 @@ const crearTienda = async (req, res) => {
 
     await tienda.save();
 
+    console.log(`✅ Tienda creada: ${tienda.nombre} (${tienda.slug})`);
+
+    // ✅ Devolver tienda directamente
     res.status(201).json({
       success: true,
-      tienda
+      data: tienda
     });
 
   } catch (error) {
     console.error('❌ Error en crearTienda:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errores = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        error: errores[0] || 'Error de validación'
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: 'Error al crear la tienda'
@@ -130,12 +196,12 @@ const crearTienda = async (req, res) => {
 };
 
 /**
- * PUT /api/tiendas/:id
- * Actualizar tienda (logo, banner, nombre, datos, etc.)
+ * @route   PUT /api/tiendas/mi-tienda
+ * @desc    Actualiza la tienda del usuario autenticado
+ * @access  Private
  */
 const actualizarTienda = async (req, res) => {
   try {
-    const { id } = req.params;
     const {
       nombre,
       descripcion,
@@ -143,51 +209,54 @@ const actualizarTienda = async (req, res) => {
       instagram,
       facebook,
       logo_url,
+      logo_cloudinary_id,
       banner_url,
+      banner_cloudinary_id,
       color_tema
     } = req.body;
 
-    // Buscar tienda
-    const tienda = await Tienda.findById(id);
+    const tienda = await Tienda.findOne({ usuario_id: req.usuario._id });
 
     if (!tienda) {
       return res.status(404).json({
         success: false,
-        error: 'Tienda no encontrada'
+        error: 'No tienes una tienda creada'
       });
     }
 
-    // Verificar que la tienda pertenezca al usuario autenticado
-    if (tienda.usuario_id.toString() !== req.usuario._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: 'No tienes permiso para editar esta tienda'
-      });
-    }
-
-    // Actualizar campos (solo los que vienen en el request)
+    // Actualizar solo campos que vienen en el request
     if (nombre !== undefined) tienda.nombre = nombre;
     if (descripcion !== undefined) tienda.descripcion = descripcion;
     if (whatsapp !== undefined) tienda.whatsapp = whatsapp;
     if (instagram !== undefined) tienda.instagram = instagram;
     if (facebook !== undefined) tienda.facebook = facebook;
     if (logo_url !== undefined) tienda.logo_url = logo_url;
+    if (logo_cloudinary_id !== undefined) tienda.logo_cloudinary_id = logo_cloudinary_id;
     if (banner_url !== undefined) tienda.banner_url = banner_url;
+    if (banner_cloudinary_id !== undefined) tienda.banner_cloudinary_id = banner_cloudinary_id;
     if (color_tema !== undefined) tienda.color_tema = color_tema;
-
-    tienda.updatedAt = Date.now();
 
     await tienda.save();
 
     console.log(`✅ Tienda actualizada: ${tienda.nombre}`);
 
+    // ✅ Devolver tienda directamente
     res.status(200).json({
       success: true,
-      tienda
+      data: tienda
     });
 
   } catch (error) {
     console.error('❌ Error en actualizarTienda:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errores = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        error: errores[0] || 'Error de validación'
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: 'Error al actualizar la tienda'
@@ -197,6 +266,7 @@ const actualizarTienda = async (req, res) => {
 
 module.exports = {
   obtenerTiendaPorSlug,
+  obtenerProductosDeTienda,
   obtenerMiTienda,
   crearTienda,
   actualizarTienda

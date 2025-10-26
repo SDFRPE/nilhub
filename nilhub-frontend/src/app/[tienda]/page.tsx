@@ -1,4 +1,4 @@
-// src/app/[tienda]/page.tsx - VERSIÓN FINAL SIN ERRORES
+// src/app/[tienda]/page.tsx - VERSIÓN CORREGIDA
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -61,15 +61,16 @@ export default function CatalogoPage() {
   const [categoria, setCategoria] = useState('todas');
   const [busqueda, setBusqueda] = useState('');
 
-  // Cargar datos
+  // ✅ CARGAR DATOS - SECCIÓN CORREGIDA
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError('');
 
       try {
+        // Cargar tienda
         const tiendaResponse = await api.tiendas.getBySlug(tiendaSlug);
-        
+
         if (!tiendaResponse.success || !tiendaResponse.data) {
           setError('Tienda no encontrada');
           return;
@@ -77,15 +78,35 @@ export default function CatalogoPage() {
 
         setTienda(tiendaResponse.data);
 
+        // Cargar productos
         const productosResponse = await api.tiendas.getProductos(tiendaSlug);
-        
+
         if (productosResponse.success) {
-          setProductos(productosResponse.data);
+          // ✅ FIX: Type guard para manejar ambos formatos
+          const data = productosResponse.data;
+
+          // Verificar si es un array directamente
+          if (Array.isArray(data)) {
+            setProductos(data);
+          }
+          // Verificar si es un objeto con propiedad 'productos'
+          else if (data && typeof data === 'object' && 'productos' in data) {
+            const dataWithProductos = data as { productos: Producto[] };
+            setProductos(dataWithProductos.productos || []);
+          }
+          // Fallback: array vacío
+          else {
+            console.warn('Formato de respuesta inesperado:', data);
+            setProductos([]);
+          }
+        } else {
+          setProductos([]);
         }
 
       } catch (err) {
         console.error('Error al cargar datos:', err);
         setError('Error al cargar la tienda. Intenta de nuevo.');
+        setProductos([]);
       } finally {
         setLoading(false);
       }
@@ -96,30 +117,41 @@ export default function CatalogoPage() {
 
   // Filtrar productos
   const productosFiltrados = useMemo(() => {
+    // ✅ Asegurar que productos sea un array antes de filtrar
+    if (!Array.isArray(productos)) {
+      console.warn('productos no es un array:', productos);
+      return [];
+    }
+
     return productos.filter((producto) => {
       const pasaCategoria = categoria === 'todas' || producto.categoria === categoria;
       const terminoBusqueda = busqueda.toLowerCase();
-      const pasaBusqueda = !busqueda || 
+      const pasaBusqueda = !busqueda ||
         producto.nombre.toLowerCase().includes(terminoBusqueda) ||
         producto.descripcion?.toLowerCase().includes(terminoBusqueda) ||
         producto.marca?.toLowerCase().includes(terminoBusqueda);
-      
+
       return pasaCategoria && pasaBusqueda && producto.activo;
     });
   }, [productos, categoria, busqueda]);
 
   // Contadores por categoría
   const contadores = useMemo(() => {
-    const counts: Record<string, number> = { 
-      todas: productos.filter(p => p.activo).length 
+    // ✅ Asegurar que productos sea un array
+    if (!Array.isArray(productos)) {
+      return { todas: 0 };
+    }
+
+    const counts: Record<string, number> = {
+      todas: productos.filter(p => p.activo).length
     };
-    
+
     productos.forEach((producto) => {
       if (producto.activo) {
         counts[producto.categoria] = (counts[producto.categoria] || 0) + 1;
       }
     });
-    
+
     return counts;
   }, [productos]);
 
@@ -191,7 +223,7 @@ export default function CatalogoPage() {
               {error || 'La tienda que buscas no existe o está temporalmente desactivada.'}
             </p>
 
-            <Link 
+            <Link
               href="/"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl font-semibold hover:scale-105 hover:shadow-xl hover:shadow-pink-500/50 transition-all duration-300"
             >
@@ -215,7 +247,7 @@ export default function CatalogoPage() {
 
       <div className="relative">
         {/* Header */}
-        <TiendaHeader 
+        <TiendaHeader
           tienda={tienda}
           showBanner={true}
         />
@@ -223,12 +255,12 @@ export default function CatalogoPage() {
         {/* Layout principal */}
         <div className="container mx-auto px-4 py-8">
           <div className="grid lg:grid-cols-[320px_1fr] gap-8 max-w-7xl mx-auto">
-            
+
             {/* Sidebar - Desktop */}
             <aside className="lg:sticky lg:top-8 lg:h-fit space-y-6">
               {/* Búsqueda */}
               <div className="animate-in fade-in slide-in-from-left duration-500">
-                <SearchBar 
+                <SearchBar
                   value={busqueda}
                   onChange={setBusqueda}
                   placeholder="Buscar productos..."
@@ -237,7 +269,7 @@ export default function CatalogoPage() {
 
               {/* Filtros verticales - Solo desktop */}
               <div className="hidden lg:block animate-in fade-in slide-in-from-left duration-700">
-                <CategoryFilter 
+                <CategoryFilter
                   categoriaActual={categoria}
                   onCategoriaChange={setCategoria}
                   contadores={contadores}
@@ -263,7 +295,7 @@ export default function CatalogoPage() {
             <main className="space-y-6">
               {/* Filtros horizontales - Solo mobile */}
               <div className="lg:hidden animate-in fade-in slide-in-from-bottom duration-500">
-                <CategoryFilter 
+                <CategoryFilter
                   categoriaActual={categoria}
                   onCategoriaChange={setCategoria}
                   contadores={contadores}
@@ -278,7 +310,7 @@ export default function CatalogoPage() {
                     <Alert className="bg-blue-50 border-blue-200 py-2">
                       <AlertCircle className="h-4 w-4 text-blue-600" />
                       <AlertDescription className="text-blue-800 text-sm">
-                        {productosFiltrados.length === 0 
+                        {productosFiltrados.length === 0
                           ? `Sin resultados ${busqueda ? `para "${busqueda}"` : 'en esta categoría'}`
                           : `${productosFiltrados.length} producto${productosFiltrados.length === 1 ? '' : 's'}`
                         }
@@ -286,7 +318,7 @@ export default function CatalogoPage() {
                     </Alert>
                   ) : (
                     <Badge variant="secondary" className="text-sm font-medium px-4 py-2">
-                      {productos.filter(p => p.activo).length} productos disponibles
+                      {Array.isArray(productos) ? productos.filter(p => p.activo).length : 0} productos disponibles
                     </Badge>
                   )}
                 </div>
@@ -294,16 +326,16 @@ export default function CatalogoPage() {
 
               {/* Grid de productos */}
               <div className="animate-in fade-in slide-in-from-bottom duration-700 delay-200">
-                <ProductGrid 
+                <ProductGrid
                   productos={productosFiltrados}
                   tiendaSlug={tiendaSlug}
                   showStats={false}
                   emptyMessage={
-                    busqueda 
-                      ? `No se encontraron productos para "${busqueda}"` 
+                    busqueda
+                      ? `No se encontraron productos para "${busqueda}"`
                       : categoria === 'todas'
-                      ? "Esta tienda aún no tiene productos"
-                      : "No hay productos en esta categoría"
+                        ? "Esta tienda aún no tiene productos"
+                        : "No hay productos en esta categoría"
                   }
                 />
               </div>
@@ -333,7 +365,7 @@ export default function CatalogoPage() {
         </div>
 
         {/* WhatsApp flotante */}
-        <WhatsAppButton 
+        <WhatsAppButton
           telefono={tienda.whatsapp}
           mensaje={mensajeWhatsApp}
           variant="floating"

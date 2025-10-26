@@ -1,8 +1,8 @@
-// src/routes/upload.js
+// backend/src/routes/upload.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { uploadImage, deleteImage, uploadMultipleImages } = require('../config/cloudinary');
+const uploadController = require('../controllers/uploadController');
 const { protect } = require('../middleware/auth');
 
 // Configurar multer para memoria (buffer)
@@ -22,114 +22,25 @@ const upload = multer({
   }
 });
 
-// ===================================
-// POST /api/upload/imagen
-// Subir una sola imagen (protegida)
-// ===================================
-router.post('/imagen', protect, upload.single('imagen'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No se proporcionó ninguna imagen'
-      });
-    }
+/**
+ * @route   POST /api/upload/imagen
+ * @desc    Subir una sola imagen
+ * @access  Private
+ */
+router.post('/imagen', protect, upload.single('imagen'), uploadController.subirImagen);
 
-    // Convertir buffer a base64
-    const b64 = Buffer.from(req.file.buffer).toString('base64');
-    const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+/**
+ * @route   POST /api/upload/imagenes
+ * @desc    Subir múltiples imágenes (máx 5)
+ * @access  Private
+ */
+router.post('/imagenes', protect, upload.array('imagenes', 5), uploadController.subirImagenes);
 
-    // Obtener folder del query (opcional)
-    const folder = req.query.folder || 'nilhub/productos';
-
-    // Subir a Cloudinary
-    const result = await uploadImage(dataURI, folder);
-
-    res.json({
-      success: true,
-      data: result
-    });
-
-  } catch (error) {
-    console.error('Error al subir imagen:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Error al subir imagen'
-    });
-  }
-});
-
-// ===================================
-// POST /api/upload/imagenes
-// Subir múltiples imágenes (protegida)
-// ===================================
-router.post('/imagenes', protect, upload.array('imagenes', 5), async (req, res) => {
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No se proporcionaron imágenes'
-      });
-    }
-
-    // Convertir todos los archivos a base64
-    const dataURIs = req.files.map(file => {
-      const b64 = Buffer.from(file.buffer).toString('base64');
-      return `data:${file.mimetype};base64,${b64}`;
-    });
-
-    // Obtener folder del query (opcional)
-    const folder = req.query.folder || 'nilhub/productos';
-
-    // Subir a Cloudinary
-    const results = await uploadMultipleImages(dataURIs, folder);
-
-    res.json({
-      success: true,
-      count: results.length,
-      data: results
-    });
-
-  } catch (error) {
-    console.error('Error al subir imágenes:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Error al subir imágenes'
-    });
-  }
-});
-
-// ===================================
-// DELETE /api/upload/:cloudinary_id
-// Eliminar imagen (protegida)
-// ===================================
-router.delete('/:cloudinary_id', protect, async (req, res) => {
-  try {
-    // Capturar el cloudinary_id completo (puede tener slashes)
-    const cloudinary_id = req.params.cloudinary_id;
-
-    if (!cloudinary_id) {
-      return res.status(400).json({
-        success: false,
-        error: 'ID de Cloudinary no proporcionado'
-      });
-    }
-
-    // Eliminar de Cloudinary
-    await deleteImage(cloudinary_id);
-
-    res.json({
-      success: true,
-      data: {}
-    });
-
-  } catch (error) {
-    console.error('Error al eliminar imagen:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Error al eliminar imagen'
-    });
-  }
-});
+/**
+ * @route   DELETE /api/upload/:cloudinary_id
+ * @desc    Eliminar imagen
+ * @access  Private
+ */
+router.delete('/:cloudinary_id', protect, uploadController.eliminarImagen);
 
 module.exports = router;

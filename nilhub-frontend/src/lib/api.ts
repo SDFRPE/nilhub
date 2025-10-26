@@ -1,4 +1,4 @@
-// src/lib/api.ts - COMPLETO CON CORRECCIÓN
+// fronted/src/lib/api.ts - COMPLETO CON CORRECCIÓN
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 // ===================================

@@ -2,56 +2,155 @@
 const nodemailer = require('nodemailer');
 
 /**
- * SERVICIO DE EMAIL CON GMAIL
+ * @fileoverview Servicio de Email con Gmail para envío de notificaciones
+ * Usa Gmail SMTP con contraseña de aplicación
  * 
- * Configuración con contraseña de aplicación de Gmail
- * Email: rs.daysuu@gmail.com
- * Contraseña de app: tyqd hjge oxto xbyz
+ * @requires nodemailer
+ * 
+ * @description
+ * Configuración:
+ * - GMAIL_USER: Email de Gmail (rs.daysuu@gmail.com)
+ * - GMAIL_APP_PASSWORD: Contraseña de app de Gmail
+ * 
+ * Cómo obtener contraseña de app:
+ * 1. Cuenta Google → Seguridad
+ * 2. Verificación en 2 pasos (activar)
+ * 3. Contraseñas de aplicación → Generar
  */
 
-// Crear transporter de Gmail
+/**
+ * @description Validar configuración de Gmail
+ * @throws {Error} Si faltan variables de entorno
+ * @private
+ */
+const validarConfiguracion = () => {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    throw new Error(
+      'Faltan credenciales de Gmail. Configura GMAIL_USER y GMAIL_APP_PASSWORD en .env'
+    );
+  }
+};
+
+// Validar antes de crear transporter
+try {
+  validarConfiguracion();
+} catch (error) {
+  console.error('❌', error.message);
+}
+
+/**
+ * @description Crear transporter de Gmail
+ * Usa Gmail SMTP con autenticación de contraseña de aplicación
+ */
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.GMAIL_USER,           // rs.daysuu@gmail.com
-    pass: process.env.GMAIL_APP_PASSWORD    // tyqd hjge oxto xbyz
-  }
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD
+  },
+  // Opciones adicionales
+  pool: true,           // Usar pool de conexiones
+  maxConnections: 5,    // Máximo 5 conexiones concurrentes
+  maxMessages: 100,     // Máximo 100 mensajes por conexión
+  rateDelta: 1000,      // Limitar a 1 mensaje por segundo
+  rateLimit: 1
 });
 
-// Verificar conexión al iniciar
+/**
+ * @description Verificar conexión con Gmail al iniciar
+ * Valida credenciales y conectividad
+ */
 transporter.verify((error, success) => {
   if (error) {
-    console.error('❌ Error al conectar con Gmail:', error);
+    console.error('❌ Error al conectar con Gmail:', error.message);
+    console.error('   Verifica:');
+    console.error('   1. Que GMAIL_USER y GMAIL_APP_PASSWORD estén en .env');
+    console.error('   2. Que la verificación en 2 pasos esté activa');
+    console.error('   3. Que la contraseña de app sea correcta');
   } else {
-    console.log('✅ Gmail listo para enviar emails');
+    console.log('✅ Gmail configurado y listo para enviar emails');
   }
 });
 
 /**
- * Enviar código de recuperación por email
+ * @description Envía código de recuperación de contraseña por email
+ * 
+ * @async
+ * @param {string} email - Email del destinatario
+ * @param {string} nombre - Nombre del destinatario
+ * @param {string} code - Código de 6 dígitos
+ * @returns {Promise<Object>} Resultado del envío
+ * @returns {boolean} returns.success - Si el envío fue exitoso
+ * @returns {string} returns.messageId - ID del mensaje enviado
+ * 
+ * @throws {Error} Si falla el envío del email
+ * 
+ * @example
+ * await enviarCodigoRecuperacion('usuario@email.com', 'Juan', '123456');
  */
 const enviarCodigoRecuperacion = async (email, nombre, code) => {
   try {
+    // Validar parámetros
+    if (!email || !nombre || !code) {
+      throw new Error('Faltan parámetros requeridos: email, nombre, code');
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error('Formato de email inválido');
+    }
+
+    // Validar código (6 dígitos)
+    if (!/^\d{6}$/.test(code)) {
+      throw new Error('El código debe tener 6 dígitos');
+    }
+
     const mailOptions = {
-      from: `"NilHub" <${process.env.GMAIL_USER}>`,
+      from: `"NilHub - Catálogos Virtuales" <${process.env.GMAIL_USER}>`,
       to: email,
-      subject: 'Código de recuperación de contraseña - NilHub',
-      html: generarHTMLEmail(nombre, code)
+      subject: '🔐 Código de recuperación de contraseña - NilHub',
+      html: generarHTMLEmail(nombre, code),
+      // Opciones adicionales
+      priority: 'high',
+      headers: {
+        'X-Mailer': 'NilHub Password Reset Service'
+      }
     };
 
     const info = await transporter.sendMail(mailOptions);
 
-    console.log('✅ Email enviado correctamente:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    console.log(`✅ Email enviado a ${email} (ID: ${info.messageId})`);
+    
+    return { 
+      success: true, 
+      messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected
+    };
 
   } catch (error) {
-    console.error('❌ Error al enviar email:', error);
-    throw new Error('Error al enviar el email');
+    console.error('❌ Error al enviar email:', error.message);
+    
+    // Errores específicos de Gmail
+    if (error.code === 'EAUTH') {
+      throw new Error('Error de autenticación con Gmail. Verifica credenciales.');
+    }
+    if (error.code === 'ECONNECTION') {
+      throw new Error('No se pudo conectar con Gmail. Verifica tu conexión a internet.');
+    }
+    
+    throw new Error('Error al enviar el email: ' + error.message);
   }
 };
 
 /**
- * Generar HTML del email con el código
+ * @description Genera HTML del email con el código de recuperación
+ * 
+ * @param {string} nombre - Nombre del destinatario
+ * @param {string} code - Código de 6 dígitos
+ * @returns {string} HTML del email
+ * @private
  */
 const generarHTMLEmail = (nombre, code) => {
   return `
@@ -148,15 +247,53 @@ const generarHTMLEmail = (nombre, code) => {
 };
 
 /**
- * Enviar notificación de cambio de contraseña exitoso
+ * @description Envía email de confirmación de cambio de contraseña
+ * 
+ * @async
+ * @param {string} email - Email del destinatario
+ * @param {string} nombre - Nombre del destinatario
+ * @returns {Promise<Object>} Resultado del envío
+ * @returns {boolean} returns.success - Si el envío fue exitoso
+ * 
+ * @example
+ * await enviarConfirmacionCambio('usuario@email.com', 'Juan');
  */
 const enviarConfirmacionCambio = async (email, nombre) => {
   try {
+    // Validar parámetros
+    if (!email || !nombre) {
+      throw new Error('Faltan parámetros requeridos: email, nombre');
+    }
+
     const mailOptions = {
-      from: `"NilHub" <${process.env.GMAIL_USER}>`,
+      from: `"NilHub - Catálogos Virtuales" <${process.env.GMAIL_USER}>`,
       to: email,
-      subject: 'Contraseña actualizada exitosamente - NilHub',
-      html: `
+      subject: '✅ Contraseña actualizada exitosamente - NilHub',
+      html: generarHTMLConfirmacion(nombre)
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email de confirmación enviado a ${email} (ID: ${info.messageId})`);
+    
+    return { success: true, messageId: info.messageId };
+
+  } catch (error) {
+    console.error('❌ Error al enviar confirmación:', error.message);
+    // No lanzar error - la contraseña ya se cambió exitosamente
+    // Solo registrar el fallo en el log
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * @description Genera HTML del email de confirmación
+ * 
+ * @param {string} nombre - Nombre del destinatario
+ * @returns {string} HTML del email
+ * @private
+ */
+const generarHTMLConfirmacion = (nombre) => {
+  return `
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -184,7 +321,7 @@ const enviarConfirmacionCambio = async (email, nombre) => {
               </p>
               
               <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
-                Te confirmamos que tu contraseña ha sido actualizada exitosamente.
+                Te confirmamos que tu contraseña ha sido actualizada exitosamente en <strong>NilHub</strong>.
               </p>
 
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #d1fae5; border-left: 4px solid #10b981; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -207,7 +344,7 @@ const enviarConfirmacionCambio = async (email, nombre) => {
           <tr>
             <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0; color: #9ca3af; font-size: 13px;">
-                © ${new Date().getFullYear()} NilHub
+                © ${new Date().getFullYear()} NilHub - Catálogos Virtuales
               </p>
             </td>
           </tr>
@@ -218,21 +355,27 @@ const enviarConfirmacionCambio = async (email, nombre) => {
   </table>
 </body>
 </html>
-      `
-    };
+  `;
+};
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email de confirmación enviado:', info.messageId);
-    
-    return { success: true };
+/**
+ * @description Cierra el transporter de Gmail
+ * Útil para testing o cierre graceful
+ * 
+ * @async
+ * @returns {Promise<void>}
+ */
+const cerrarTransporter = async () => {
+  try {
+    transporter.close();
+    console.log('📧 Transporter de Gmail cerrado');
   } catch (error) {
-    console.error('❌ Error al enviar confirmación:', error);
-    // No lanzar error, solo log (la contraseña ya se cambió)
-    return { success: false };
+    console.error('Error al cerrar transporter:', error);
   }
 };
 
 module.exports = {
   enviarCodigoRecuperacion,
-  enviarConfirmacionCambio
+  enviarConfirmacionCambio,
+  cerrarTransporter
 };

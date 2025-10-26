@@ -1,11 +1,35 @@
-// src/models/Producto.js
+// backend/src/models/Producto.js
 const mongoose = require('mongoose');
 
+/**
+ * @description Esquema de Producto para catálogos de NilHub
+ * Maneja inventario, precios, imágenes y estadísticas
+ * 
+ * @typedef {Object} Producto
+ * @property {ObjectId} tienda_id - ID de la tienda dueña
+ * @property {string} nombre - Nombre del producto
+ * @property {string} descripcion - Descripción detallada
+ * @property {string} categoria - Categoría del producto
+ * @property {string} marca - Marca del producto
+ * @property {number} precio - Precio regular
+ * @property {number} precio_oferta - Precio en oferta (opcional)
+ * @property {number} stock - Cantidad en inventario (manual)
+ * @property {boolean} hay_stock - Si hay stock disponible
+ * @property {Array<Object>} imagenes - URLs de Cloudinary
+ * @property {string} ingredientes - Lista de ingredientes
+ * @property {string} peso - Peso o tamaño del producto
+ * @property {boolean} activo - Si el producto está visible
+ * @property {number} vistas - Contador de vistas
+ * @property {number} clicks_whatsapp - Clicks en botón WhatsApp
+ * @property {Date} createdAt - Fecha de creación
+ * @property {Date} updatedAt - Fecha de última actualización
+ */
 const productoSchema = new mongoose.Schema({
   tienda_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tienda',
-    required: true
+    required: true,
+    index: true
   },
   nombre: {
     type: String,
@@ -22,7 +46,8 @@ const productoSchema = new mongoose.Schema({
     type: String,
     required: [true, 'La categoría es obligatoria'],
     enum: ['maquillaje', 'skincare', 'fragancias', 'cuidado-personal', 'accesorios', 'otros'],
-    lowercase: true
+    lowercase: true,
+    index: true
   },
   marca: {
     type: String,
@@ -40,6 +65,7 @@ const productoSchema = new mongoose.Schema({
     validate: {
       validator: function(value) {
         // Si hay precio de oferta, debe ser menor al precio normal
+        // ⚠️ NOTA: Esta validación solo funciona en .save(), no en .update()
         return !value || value < this.precio;
       },
       message: 'El precio de oferta debe ser menor al precio normal'
@@ -75,16 +101,19 @@ const productoSchema = new mongoose.Schema({
   },
   activo: {
     type: Boolean,
-    default: true
+    default: true,
+    index: true
   },
   // Estadísticas
   vistas: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
   clicks_whatsapp: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true
@@ -94,7 +123,12 @@ const productoSchema = new mongoose.Schema({
 // MIDDLEWARE
 // ===================================
 
-// Actualizar hay_stock según el stock
+/**
+ * @description Actualiza hay_stock automáticamente según el stock
+ * Se ejecuta antes de guardar con .save()
+ * ⚠️ NO se ejecuta con .updateOne(), .findOneAndUpdate(), etc
+ * @middleware
+ */
 productoSchema.pre('save', function(next) {
   this.hay_stock = this.stock > 0;
   next();
@@ -104,19 +138,36 @@ productoSchema.pre('save', function(next) {
 // MÉTODOS DE INSTANCIA
 // ===================================
 
-// Incrementar vistas
+/**
+ * @description Incrementa el contador de vistas del producto
+ * @returns {Promise<Producto>} Producto actualizado
+ * @example
+ * await producto.incrementarVistas();
+ */
 productoSchema.methods.incrementarVistas = async function() {
   this.vistas += 1;
   return await this.save();
 };
 
-// Incrementar clicks de WhatsApp
+/**
+ * @description Incrementa el contador de clicks en WhatsApp
+ * @returns {Promise<Producto>} Producto actualizado
+ * @example
+ * await producto.incrementarClicksWhatsApp();
+ */
 productoSchema.methods.incrementarClicksWhatsApp = async function() {
   this.clicks_whatsapp += 1;
   return await this.save();
 };
 
-// Actualizar stock
+/**
+ * @description Actualiza el stock del producto y recalcula hay_stock
+ * ⚠️ USAR ESTE MÉTODO en lugar de updateOne para que funcione el middleware
+ * @param {number} nuevoStock - Nueva cantidad de stock
+ * @returns {Promise<Producto>} Producto actualizado
+ * @example
+ * await producto.actualizarStock(15);
+ */
 productoSchema.methods.actualizarStock = async function(nuevoStock) {
   this.stock = nuevoStock;
   this.hay_stock = nuevoStock > 0;
@@ -127,16 +178,32 @@ productoSchema.methods.actualizarStock = async function(nuevoStock) {
 // MÉTODOS ESTÁTICOS
 // ===================================
 
-// Obtener productos por categoría
+/**
+ * @description Obtiene productos de una tienda filtrados por categoría
+ * @static
+ * @param {string|ObjectId} tiendaId - ID de la tienda
+ * @param {string} categoria - Categoría a filtrar ('todas' para todas)
+ * @returns {Promise<Array<Producto>>} Lista de productos
+ * @example
+ * const productos = await Producto.porCategoria(tiendaId, 'maquillaje');
+ */
 productoSchema.statics.porCategoria = function(tiendaId, categoria) {
   const query = { tienda_id: tiendaId, activo: true };
-  if (categoria !== 'todas') {
+  if (categoria && categoria !== 'todas') {
     query.categoria = categoria;
   }
   return this.find(query).sort({ createdAt: -1 });
 };
 
-// Buscar productos
+/**
+ * @description Busca productos por texto en nombre, descripción o marca
+ * @static
+ * @param {string|ObjectId} tiendaId - ID de la tienda
+ * @param {string} terminoBusqueda - Término a buscar
+ * @returns {Promise<Array<Producto>>} Lista de productos encontrados
+ * @example
+ * const resultados = await Producto.buscar(tiendaId, 'labial');
+ */
 productoSchema.statics.buscar = function(tiendaId, terminoBusqueda) {
   return this.find({
     tienda_id: tiendaId,
@@ -149,12 +216,34 @@ productoSchema.statics.buscar = function(tiendaId, terminoBusqueda) {
   }).sort({ createdAt: -1 });
 };
 
+/**
+ * @description Obtiene productos relacionados por categoría
+ * Excluye el producto actual
+ * @static
+ * @param {string|ObjectId} tiendaId - ID de la tienda
+ * @param {string} categoria - Categoría del producto
+ * @param {string|ObjectId} excluirId - ID del producto a excluir
+ * @param {number} limite - Cantidad máxima de resultados
+ * @returns {Promise<Array<Producto>>} Lista de productos relacionados
+ * @example
+ * const relacionados = await Producto.relacionados(tiendaId, 'maquillaje', productoId, 4);
+ */
+productoSchema.statics.relacionados = function(tiendaId, categoria, excluirId, limite = 4) {
+  return this.find({
+    tienda_id: tiendaId,
+    categoria: categoria,
+    activo: true,
+    _id: { $ne: excluirId }
+  })
+  .limit(limite)
+  .sort({ createdAt: -1 });
+};
+
 // ===================================
 // ÍNDICES
 // ===================================
-productoSchema.index({ tienda_id: 1 });
+productoSchema.index({ tienda_id: 1, activo: 1 }); // Compuesto para queries frecuentes
 productoSchema.index({ categoria: 1 });
-productoSchema.index({ activo: 1 });
-productoSchema.index({ nombre: 'text', descripcion: 'text', marca: 'text' });
+productoSchema.index({ nombre: 'text', descripcion: 'text', marca: 'text' }); // Text search
 
 module.exports = mongoose.model('Producto', productoSchema);
