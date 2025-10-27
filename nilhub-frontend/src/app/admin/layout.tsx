@@ -1,3 +1,4 @@
+// fronted/src/app/admin/layout.tsx
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';

@@ -1,7 +1,8 @@
-// src/contexts/AuthContext.tsx
+// fronted/src/contexts/AuthContext.tsx
 /**
  * @fileoverview Contexto de autenticación para NilHub
  * Maneja el estado global de autenticación del usuario
+ * Soporta usuarios admin (sin tienda) y vendedores (con tienda)
  * @module AuthContext
  */
 
@@ -22,12 +23,14 @@ import api, { Usuario, Tienda } from '@/lib/api';
 interface AuthContextType {
   /** Usuario autenticado (null si no hay sesión) */
   usuario: Usuario | null;
-  /** Tienda del usuario (null si no tiene o no hay sesión) */
+  /** Tienda del usuario (null si es admin o no tiene) */
   tienda: Tienda | null;
   /** Indica si el usuario está autenticado */
   isAuthenticated: boolean;
   /** Indica si se está verificando la sesión */
   isLoading: boolean;
+  /** Indica si el usuario es administrador */
+  isAdmin: boolean;
   /** Función para iniciar sesión */
   login: (email: string, password: string) => Promise<void>;
   /** Función para registrar nuevo usuario */
@@ -74,6 +77,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  * Proveedor del contexto de autenticación
  * Debe envolver toda la aplicación
  * 
+ * Roles soportados:
+ * - 'admin': Usuario administrador sin tienda (gestiona la plataforma)
+ * - 'vendedor': Usuario con tienda (gestiona su catálogo)
+ * 
  * @param props - Props del componente
  * @param props.children - Componentes hijos
  * 
@@ -102,6 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Verifica si hay una sesión válida
    * Lee el token del localStorage y lo valida con el backend
    * 
+   * IMPORTANTE: Los usuarios admin NO tienen tienda asociada
+   * 
    * @private
    */
   const checkAuth = async () => {
@@ -121,9 +130,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.auth.me();
 
       if (response.success) {
-        console.log('✅ Sesión válida:', response.data.usuario.email);
-        setUsuario(response.data.usuario);
-        setTienda(response.data.tienda);
+        const { usuario, tienda } = response.data;
+        
+        console.log('✅ Sesión válida:', usuario.email);
+        console.log('📋 Rol:', usuario.rol);
+        
+        setUsuario(usuario);
+        
+        // ⚠️ IMPORTANTE: Admin NO tiene tienda (es null)
+        if (usuario.rol === 'admin') {
+          console.log('👑 Usuario es administrador - Sin tienda asignada');
+          setTienda(null);
+        } else {
+          console.log('🏪 Usuario es vendedor - Tienda:', tienda?.nombre);
+          setTienda(tienda || null);
+        }
       } else {
         console.warn('⚠️ Respuesta inválida del servidor');
         localStorage.removeItem('token');
@@ -178,9 +199,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('token', response.data.token);
         console.log('✅ Login exitoso - Token guardado');
 
+        const { usuario, tienda } = response.data;
+
         // Actualizar estado
-        setUsuario(response.data.usuario);
-        setTienda(response.data.tienda);
+        setUsuario(usuario);
+        
+        // ⚠️ Admin no tiene tienda
+        if (usuario.rol === 'admin') {
+          console.log('👑 Login como administrador');
+          setTienda(null);
+        } else {
+          console.log('🏪 Login como vendedor');
+          setTienda(tienda || null);
+        }
 
         // Redirigir al admin
         router.push('/admin');
@@ -197,6 +228,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /**
    * Registra un nuevo usuario y crea su tienda
    * Guarda el token en localStorage y redirige al admin
+   * 
+   * NOTA: Solo aplica para rol 'vendedor'
+   * El registro de admin se hace manualmente desde el backend
    * 
    * @param datos - Datos del usuario y tienda
    * @throws Error si el registro falla
@@ -226,7 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Actualizar estado
         setUsuario(response.data.usuario);
-        setTienda(response.data.tienda);
+        setTienda(response.data.tienda || null);
 
         // Redirigir al admin
         router.push('/admin');
@@ -282,13 +316,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.success) {
         console.log('✅ Datos del usuario actualizados');
-        setUsuario(response.data.usuario);
-        setTienda(response.data.tienda);
+        const { usuario, tienda } = response.data;
+        
+        setUsuario(usuario);
+        
+        // Admin no tiene tienda
+        if (usuario.rol === 'admin') {
+          setTienda(null);
+        } else {
+          setTienda(tienda || null);
+        }
       }
     } catch (error) {
       console.error('❌ Error al refrescar usuario:', error);
     }
   };
+
+  // Calcular si es admin
+  const isAdmin = usuario?.rol === 'admin';
 
   // Valor del contexto
   const value = {
@@ -296,6 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     tienda,
     isAuthenticated: !!usuario,
     isLoading,
+    isAdmin,
     login,
     registro,
     logout,
@@ -322,10 +368,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
  * 
  * @example
  * function MiComponente() {
- *   const { usuario, isAuthenticated, login, logout } = useAuth();
+ *   const { usuario, isAuthenticated, isAdmin, login, logout } = useAuth();
  * 
  *   if (!isAuthenticated) {
  *     return <div>No autenticado</div>;
+ *   }
+ * 
+ *   if (isAdmin) {
+ *     return <div>Panel de Administrador</div>;
  *   }
  * 
  *   return <div>Hola {usuario?.nombre}</div>;

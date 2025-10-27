@@ -1,3 +1,4 @@
+// fronted/src\app\admin\productos\nuevo/page.tsx
 'use client';
 
 import { useState } from 'react';

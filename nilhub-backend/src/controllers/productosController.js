@@ -108,12 +108,24 @@ const crearProducto = async (req, res) => {
       });
     }
 
-    // Validar precio de oferta (si existe)
-    if (req.body.precio_oferta && req.body.precio_oferta >= req.body.precio) {
-      return res.status(400).json({
-        success: false,
-        error: 'El precio de oferta debe ser menor al precio normal'
-      });
+    // ✅ CORREGIDO: Validar precio de oferta (convertir a números)
+    if (req.body.precio_oferta) {
+      const precioNormal = parseFloat(req.body.precio);
+      const precioOferta = parseFloat(req.body.precio_oferta);
+
+      if (isNaN(precioNormal) || isNaN(precioOferta)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Los precios deben ser valores numéricos válidos'
+        });
+      }
+
+      if (precioOferta >= precioNormal) {
+        return res.status(400).json({
+          success: false,
+          error: 'El precio de oferta debe ser menor al precio normal'
+        });
+      }
     }
 
     // Crear producto
@@ -188,13 +200,28 @@ const actualizarProducto = async (req, res) => {
       });
     }
 
-    // Validar precio de oferta si se está actualizando
-    if (req.body.precio_oferta) {
-      const precioFinal = req.body.precio || producto.precio;
-      if (req.body.precio_oferta >= precioFinal) {
+    // ✅ CORREGIDO: Validar precio de oferta si se está actualizando
+    if (req.body.precio_oferta !== undefined && req.body.precio_oferta !== null && req.body.precio_oferta !== '') {
+      // Determinar el precio final (el que viene en el body o el actual del producto)
+      const precioFinal = req.body.precio !== undefined 
+        ? parseFloat(req.body.precio) 
+        : parseFloat(producto.precio);
+      
+      const precioOferta = parseFloat(req.body.precio_oferta);
+
+      // Validar que sean números válidos
+      if (isNaN(precioFinal) || isNaN(precioOferta)) {
         return res.status(400).json({
           success: false,
-          error: 'El precio de oferta debe ser menor al precio normal'
+          error: 'Los precios deben ser valores numéricos válidos'
+        });
+      }
+
+      // Comparar valores numéricos
+      if (precioOferta >= precioFinal) {
+        return res.status(400).json({
+          success: false,
+          error: `El precio de oferta (${precioOferta}) debe ser menor al precio normal (${precioFinal})`
         });
       }
     }

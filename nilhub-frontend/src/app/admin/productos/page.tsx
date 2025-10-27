@@ -1,3 +1,4 @@
+// fronted/src/app/admin/productos/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -409,7 +410,8 @@ function ProductoItem({ producto, onUpdateStock, onDelete, onToggleActivo }: Pro
 
           {/* Acciones */}
           <div className="flex flex-col gap-2">
-            <Link href={`/admin/productos/editar/${producto._id}`}>
+            {/* ✅ RUTA CORREGIDA - Removido "/editar/" */}
+            <Link href={`/admin/productos/${producto._id}`}>
               <Button variant="outline" size="sm" className="w-full gap-2">
                 <Edit className="h-4 w-4" />
                 Editar

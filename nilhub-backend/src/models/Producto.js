@@ -59,17 +59,13 @@ const productoSchema = new mongoose.Schema({
     required: [true, 'El precio es obligatorio'],
     min: [0, 'El precio no puede ser negativo']
   },
+  // ✅ CORREGIDO: Eliminado el validador que causaba problemas con findByIdAndUpdate
+  // La validación se hace en el controller con parseFloat() correcto
   precio_oferta: {
     type: Number,
-    min: [0, 'El precio de oferta no puede ser negativo'],
-    validate: {
-      validator: function(value) {
-        // Si hay precio de oferta, debe ser menor al precio normal
-        // ⚠️ NOTA: Esta validación solo funciona en .save(), no en .update()
-        return !value || value < this.precio;
-      },
-      message: 'El precio de oferta debe ser menor al precio normal'
-    }
+    min: [0, 'El precio de oferta no puede ser negativo']
+    // ❌ REMOVIDO: validate (causaba conflicto con findByIdAndUpdate)
+    // ✅ La validación precio_oferta < precio se hace en el controller
   },
   stock: {
     type: Number,

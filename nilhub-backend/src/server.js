@@ -188,6 +188,7 @@ const productosRoutes = require('./routes/productos');
 const tiendasRoutes = require('./routes/tiendas');
 const uploadRoutes = require('./routes/upload');
 const passwordResetRoutes = require('./routes/passwordReset');
+const adminRoutes = require('./routes/admin');
 
 /**
  * Ruta raíz - Información de la API
@@ -277,6 +278,7 @@ app.use('/api/auth', passwordResetRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/tiendas', tiendasRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ===================================
 // MANEJO DE ERRORES

@@ -1,23 +1,82 @@
-// fronted/src/lib/api.ts - COMPLETO CON CORRECCIÓN
+// fronted/src/lib/api.ts
 /**
- * @fileoverview Cliente API REST para NilHub
- * Maneja todas las peticiones HTTP al backend
+ * @fileoverview Cliente de API para comunicación con el backend
+ * Centraliza todas las peticiones HTTP
  * @module api
  */
 
-/** URL base de la API */
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+import axios, { AxiosError } from 'axios';
 
 // ===================================
-// TIPOS (exportados desde types/index.ts)
+// CONFIGURACIÓN
+// ===================================
+
+/**
+ * Base URL de la API desde variables de entorno
+ * @constant
+ */
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
+/**
+ * Cliente de Axios configurado con base URL e interceptores
+ * @constant
+ */
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// ===================================
+// INTERCEPTORES
+// ===================================
+
+/**
+ * Interceptor de peticiones
+ * Agrega el token JWT automáticamente si existe
+ */
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    console.error('Error en interceptor de petición:', error);
+    return Promise.reject(error);
+  }
+);
+
+/**
+ * Interceptor de respuestas
+ * Maneja errores globalmente
+ */
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      console.warn('Sesión expirada - Redirigiendo a login');
+      localStorage.removeItem('token');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ===================================
+// INTERFACES
 // ===================================
 
 export interface Usuario {
   _id: string;
-  nombre: string;
   email: string;
-  telefono?: string;
-  role: 'user' | 'admin';
+  nombre: string;
+  rol: 'vendedor' | 'admin';
   activo: boolean;
   createdAt: string;
   updatedAt: string;
@@ -33,10 +92,8 @@ export interface Tienda {
   instagram?: string;
   facebook?: string;
   logo_url?: string;
-  logo_cloudinary_id?: string;
   banner_url?: string;
-  banner_cloudinary_id?: string;
-  color_tema: string;
+  color_tema?: string;
   activa: boolean;
   total_productos: number;
   createdAt: string;
@@ -48,17 +105,16 @@ export interface Producto {
   tienda_id: string;
   nombre: string;
   descripcion?: string;
-  categoria: 'maquillaje' | 'skincare' | 'fragancias' | 'cuidado-personal' | 'accesorios' | 'otros';
+  categoria: string;
   marca?: string;
   precio: number;
   precio_oferta?: number;
   stock: number;
   hay_stock: boolean;
-  imagenes: {
+  imagenes: Array<{
     url: string;
     cloudinary_id: string;
-    _id?: string;
-  }[];
+  }>;
   ingredientes?: string;
   peso?: string;
   activo: boolean;
@@ -68,90 +124,12 @@ export interface Producto {
   updatedAt: string;
 }
 
-export interface AuthResponse {
-  success: boolean;
-  data: {
-    usuario: Usuario;
-    tienda: Tienda | null;
-    token: string;
-  };
-}
-
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
-  count?: number;
   error?: string;
   message?: string;
-  errors?: Array<{ type: string; value: string; msg: string; path: string; location: string }>;
 }
-
-export interface DashboardStats {
-  totalProductos: number;
-  productosActivos: number;
-  productosSinStock: number;
-  totalVistas: number;
-  totalClicks: number;
-}
-
-// ===================================
-// HELPERS PRIVADOS
-// ===================================
-
-/**
- * Obtiene el token JWT del localStorage
- * @returns Token JWT o null si no existe
- * @private
- */
-const getToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
-};
-
-/**
- * Construye headers con autenticación
- * @returns Headers con Content-Type y Authorization (si hay token)
- * @private
- */
-const getAuthHeaders = (): HeadersInit => {
-  const token = getToken();
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  return headers;
-};
-
-/**
- * Maneja la respuesta HTTP y parsea JSON
- * Lanza error si la respuesta no es ok
- * 
- * @template T - Tipo de datos esperado en la respuesta
- * @param response - Respuesta HTTP de fetch
- * @returns Promesa con datos parseados
- * @throws Error si la respuesta no es ok o no es JSON válido
- * @private
- */
-const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> => {
-  // Intentar parsear JSON
-  let data;
-  try {
-    data = await response.json();
-  } catch (error) {
-    throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
-  }
-  
-  if (!response.ok) {
-    const errorMessage = data.error || data.message || 'Error en la petición';
-    throw new Error(errorMessage);
-  }
-  
-  return data;
-};
 
 // ===================================
 // API: AUTENTICACIÓN
@@ -159,20 +137,26 @@ const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> =>
 
 export const auth = {
   /**
-   * Registra un nuevo usuario y crea su tienda
-   * 
-   * @param datos - Datos del usuario y tienda
-   * @returns Promesa con token, usuario y tienda
-   * @throws Error si el registro falla
-   * 
-   * @example
-   * const response = await api.auth.registro({
-   *   nombre: 'María García',
-   *   email: 'maria@example.com',
-   *   password: 'password123',
-   *   nombreTienda: 'Cosméticos Mary',
-   *   whatsapp: '51987654321'
-   * });
+   * Iniciar sesión
+   */
+  login: async (email: string, password: string): Promise<ApiResponse<{
+    token: string;
+    usuario: Usuario;
+    tienda?: Tienda;
+  }>> => {
+    try {
+      const response = await apiClient.post('/auth/login', { email, password });
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al iniciar sesión');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Registrar nuevo usuario
    */
   registro: async (datos: {
     nombre: string;
@@ -182,52 +166,83 @@ export const auth = {
     whatsapp: string;
     instagram?: string;
     facebook?: string;
-  }): Promise<AuthResponse> => {
-    const response = await fetch(`${API_URL}/auth/registro`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(datos),
-    });
-    return handleResponse<AuthResponse['data']>(response);
+  }): Promise<ApiResponse<{
+    token: string;
+    usuario: Usuario;
+    tienda: Tienda;
+  }>> => {
+    try {
+      const response = await apiClient.post('/auth/registro', datos);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al registrar');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Inicia sesión con email y contraseña
-   * 
-   * @param email - Email del usuario
-   * @param password - Contraseña
-   * @returns Promesa con token, usuario y tienda
-   * @throws Error si las credenciales son inválidas
-   * 
-   * @example
-   * const response = await api.auth.login('maria@example.com', 'password123');
-   * localStorage.setItem('token', response.data.token);
+   * Obtener usuario actual
    */
-  login: async (email: string, password: string): Promise<AuthResponse> => {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    return handleResponse<AuthResponse['data']>(response);
+  me: async (): Promise<ApiResponse<{
+    usuario: Usuario;
+    tienda?: Tienda;
+  }>> => {
+    try {
+      const response = await apiClient.get('/auth/me');
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener usuario');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Obtiene datos del usuario autenticado actual
-   * Requiere token JWT en localStorage
-   * 
-   * @returns Promesa con usuario y tienda
-   * @throws Error si el token es inválido o expiró
-   * 
-   * @example
-   * const response = await api.auth.me();
-   * console.log(response.data.usuario.nombre);
+   * Solicitar código de recuperación
    */
-  me: async (): Promise<ApiResponse<{ usuario: Usuario; tienda: Tienda | null }>> => {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      headers: getAuthHeaders(),
-    });
-    return handleResponse(response);
+  forgotPassword: async (email: string, metodo: 'email' | 'whatsapp'): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.post('/auth/forgot-password', { email, metodo });
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al solicitar código');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Verificar código de recuperación
+   */
+  verifyResetCode: async (email: string, code: string): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.post('/auth/verify-reset-code', { email, code });
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Código inválido');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Cambiar contraseña con código
+   */
+  resetPassword: async (email: string, code: string, nuevaPassword: string): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.post('/auth/reset-password', { email, code, nuevaPassword });
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al cambiar contraseña');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 };
 
@@ -237,142 +252,125 @@ export const auth = {
 
 export const productos = {
   /**
-   * Obtiene todos los productos del usuario autenticado
-   * Requiere autenticación
-   * 
-   * @returns Promesa con array de productos
-   * @throws Error si no está autenticado
-   * 
-   * @example
-   * const response = await api.productos.getMisProductos();
-   * console.log(response.data); // Producto[]
+   * Obtener mis productos (requiere auth)
    */
   getMisProductos: async (): Promise<ApiResponse<Producto[]>> => {
-    const response = await fetch(`${API_URL}/productos/mis-productos`, {
-      headers: getAuthHeaders(),
-    });
-    return handleResponse(response);
+    try {
+      const response = await apiClient.get('/productos/mis-productos');
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener productos');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Obtiene un producto por su ID
-   * Ruta pública
-   * 
-   * @param id - ID del producto
-   * @returns Promesa con el producto
-   * @throws Error si el producto no existe
-   * 
-   * @example
-   * const response = await api.productos.getById('507f1f77bcf86cd799439011');
+   * Obtener productos de una tienda (público)
+   */
+  getByTienda: async (slug: string, categoria?: string, buscar?: string): Promise<ApiResponse<Producto[]>> => {
+    try {
+      const params = new URLSearchParams();
+      if (categoria) params.append('categoria', categoria);
+      if (buscar) params.append('buscar', buscar);
+
+      const response = await apiClient.get(`/productos/tienda/${slug}?${params.toString()}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener productos');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Obtener un producto por ID (público)
    */
   getById: async (id: string): Promise<ApiResponse<Producto>> => {
-    const response = await fetch(`${API_URL}/productos/${id}`);
-    return handleResponse(response);
+    try {
+      const response = await apiClient.get(`/productos/${id}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Producto no encontrado');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Crea un nuevo producto
-   * Requiere autenticación
-   * 
-   * @param datos - Datos del producto a crear
-   * @returns Promesa con el producto creado
-   * @throws Error si la validación falla
-   * 
-   * @example
-   * const response = await api.productos.create({
-   *   nombre: 'Labial Mate Rosa',
-   *   precio: 25.00,
-   *   categoria: 'maquillaje',
-   *   stock: 10,
-   *   hay_stock: true,
-   *   imagenes: [{ url: '...', cloudinary_id: '...' }]
-   * });
+   * Crear producto (requiere auth)
    */
   create: async (datos: Partial<Producto>): Promise<ApiResponse<Producto>> => {
-    const response = await fetch(`${API_URL}/productos`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(datos),
-    });
-    return handleResponse(response);
+    try {
+      const response = await apiClient.post('/productos', datos);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al crear producto');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Actualiza un producto existente
-   * Requiere autenticación y ser el propietario
-   * 
-   * @param id - ID del producto
-   * @param datos - Datos a actualizar (parcial)
-   * @returns Promesa con el producto actualizado
-   * @throws Error si no tiene permisos
-   * 
-   * @example
-   * await api.productos.update('507f...', { precio: 30.00 });
+   * Actualizar producto (requiere auth)
    */
   update: async (id: string, datos: Partial<Producto>): Promise<ApiResponse<Producto>> => {
-    const response = await fetch(`${API_URL}/productos/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(datos),
-    });
-    return handleResponse(response);
+    try {
+      const response = await apiClient.put(`/productos/${id}`, datos);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al actualizar producto');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Actualiza solo el stock de un producto
-   * Requiere autenticación
-   * 
-   * @param id - ID del producto
-   * @param stock - Nueva cantidad de stock
-   * @returns Promesa con el producto actualizado
-   * 
-   * @example
-   * await api.productos.updateStock('507f...', 5);
+   * Eliminar producto (requiere auth)
    */
-  updateStock: async (id: string, stock: number): Promise<ApiResponse<Producto>> => {
-    const response = await fetch(`${API_URL}/productos/${id}/stock`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ stock }),
-    });
-    return handleResponse(response);
+  delete: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.delete(`/productos/${id}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al eliminar producto');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Elimina un producto
-   * Requiere autenticación y ser el propietario
-   * 
-   * @param id - ID del producto a eliminar
-   * @returns Promesa con confirmación
-   * @throws Error si no tiene permisos
-   * 
-   * @example
-   * await api.productos.delete('507f...');
+   * Actualizar stock manualmente (requiere auth)
    */
-  delete: async (id: string): Promise<ApiResponse<Record<string, never>>> => {
-    const response = await fetch(`${API_URL}/productos/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    return handleResponse(response);
+  updateStock: async (id: string, stock: number, hay_stock: boolean): Promise<ApiResponse<Producto>> => {
+    try {
+      const response = await apiClient.patch(`/productos/${id}/stock`, { stock, hay_stock });
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al actualizar stock');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Registra un click en el botón de WhatsApp de un producto
-   * Ruta pública (no requiere auth)
-   * 
-   * @param id - ID del producto
-   * @returns Promesa con el nuevo contador de clicks
-   * 
-   * @example
-   * await api.productos.clickWhatsApp('507f...');
+   * Registrar click en WhatsApp (público)
    */
-  clickWhatsApp: async (id: string): Promise<ApiResponse<{ clicks_whatsapp: number }>> => {
-    const response = await fetch(`${API_URL}/productos/${id}/click-whatsapp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    return handleResponse(response);
+  clickWhatsApp: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.post(`/productos/${id}/click-whatsapp`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.warn('Error al registrar click WhatsApp:', error);
+      return { success: false, data: { message: 'Error' } };
+    }
   },
 };
 
@@ -382,189 +380,211 @@ export const productos = {
 
 export const tiendas = {
   /**
-   * Obtiene una tienda por su slug
-   * Ruta pública
-   * 
-   * @param slug - Slug de la tienda (ej: 'cosmeticos-mary')
-   * @returns Promesa con los datos de la tienda
-   * @throws Error si la tienda no existe o está inactiva
-   * 
-   * @example
-   * const response = await api.tiendas.getBySlug('cosmeticos-mary');
-   * console.log(response.data.nombre);
+   * Obtener tienda por slug (público)
    */
   getBySlug: async (slug: string): Promise<ApiResponse<Tienda>> => {
-    const response = await fetch(`${API_URL}/tiendas/${slug}`);
-    return handleResponse(response);
+    try {
+      const response = await apiClient.get(`/tiendas/${slug}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Tienda no encontrada');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Obtiene los productos de una tienda
-   * Ruta pública con filtros opcionales
-   * 
-   * @param slug - Slug de la tienda
-   * @param filtros - Filtros opcionales (categoría, búsqueda)
-   * @returns Promesa con array de productos
-   * 
-   * @example
-   * // Todos los productos
-   * await api.tiendas.getProductos('cosmeticos-mary');
-   * 
-   * // Con filtros
-   * await api.tiendas.getProductos('cosmeticos-mary', {
-   *   categoria: 'maquillaje',
-   *   busqueda: 'labial'
-   * });
+   * Obtener mi tienda (requiere auth)
    */
-  getProductos: async (
-    slug: string,
-    filtros?: { categoria?: string; busqueda?: string }
-  ): Promise<ApiResponse<Producto[]>> => {
-    const params = new URLSearchParams();
-    if (filtros?.categoria) params.append('categoria', filtros.categoria);
-    if (filtros?.busqueda) params.append('busqueda', filtros.busqueda);
-    
-    const url = `${API_URL}/tiendas/${slug}/productos${params.toString() ? '?' + params.toString() : ''}`;
-    const response = await fetch(url);
-    return handleResponse(response);
+  getMiTienda: async (): Promise<ApiResponse<Tienda>> => {
+    try {
+      const response = await apiClient.get('/tiendas/mi-tienda');
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener tienda');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 
   /**
-   * Actualiza la tienda del usuario autenticado
-   * Requiere autenticación
-   * 
-   * @param id - ID de la tienda
-   * @param datos - Datos a actualizar (parcial)
-   * @returns Promesa con la tienda actualizada
-   * 
-   * @example
-   * await api.tiendas.update('507f...', {
-   *   nombre: 'Nuevo Nombre',
-   *   descripcion: 'Nueva descripción',
-   *   logo_url: 'https://...'
-   * });
+   * Actualizar mi tienda (requiere auth)
    */
-  update: async (id: string, datos: Partial<Tienda>): Promise<ApiResponse<Tienda>> => {
-    const response = await fetch(`${API_URL}/tiendas/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(datos),
-    });
-    return handleResponse(response);
+  update: async (datos: Partial<Tienda>): Promise<ApiResponse<Tienda>> => {
+    try {
+      const response = await apiClient.put('/tiendas/mi-tienda', datos);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al actualizar tienda');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 };
 
 // ===================================
-// API: ESTADÍSTICAS
-// ===================================
-
-export const stats = {
-  /**
-   * Obtiene estadísticas del dashboard
-   * Requiere autenticación
-   * 
-   * @returns Promesa con estadísticas agregadas
-   * 
-   * @example
-   * const response = await api.stats.getDashboard();
-   * console.log(response.data.totalProductos);
-   */
-  getDashboard: async (): Promise<ApiResponse<DashboardStats>> => {
-    const response = await fetch(`${API_URL}/stats/dashboard`, {
-      headers: getAuthHeaders(),
-    });
-    return handleResponse(response);
-  },
-};
-
-// ===================================
-// API: UPLOAD DE IMÁGENES
+// API: UPLOAD
 // ===================================
 
 export const upload = {
   /**
-   * Sube una imagen a Cloudinary
-   * Requiere autenticación
-   * 
-   * @param file - Archivo a subir (File)
-   * @param folder - Carpeta de Cloudinary (opcional)
-   * @returns Promesa con URL y cloudinary_id
-   * @throws Error si el archivo es muy grande o tipo inválido
-   * 
-   * @example
-   * const response = await api.upload.imagen(file, 'logos');
-   * console.log(response.data.url); // URL de Cloudinary
+   * Subir una imagen (requiere auth)
    */
-  imagen: async (file: File, folder?: string): Promise<ApiResponse<{ url: string; cloudinary_id: string }>> => {
-    const formData = new FormData();
-    formData.append('imagen', file);
-    
-    const token = getToken();
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+  imagen: async (file: File): Promise<ApiResponse<{
+    url: string;
+    cloudinary_id: string;
+  }>> => {
+    try {
+      const formData = new FormData();
+      formData.append('imagen', file);
+
+      const response = await apiClient.post('/upload/imagen', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al subir imagen');
+      }
+      throw new Error('Error de conexión');
     }
-    
-    const url = folder ? `${API_URL}/upload/imagen?folder=${folder}` : `${API_URL}/upload/imagen`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    return handleResponse(response);
   },
 
   /**
-   * Sube múltiples imágenes a Cloudinary
-   * Requiere autenticación. Máximo 5 imágenes
-   * 
-   * @param files - Array de archivos a subir
-   * @param folder - Carpeta de Cloudinary (opcional)
-   * @returns Promesa con array de URLs y IDs
-   * @throws Error si hay más de 5 archivos
-   * 
-   * @example
-   * const response = await api.upload.imagenes([file1, file2], 'productos');
+   * Subir múltiples imágenes (requiere auth)
    */
-  imagenes: async (files: File[], folder?: string): Promise<ApiResponse<{ url: string; cloudinary_id: string }[]>> => {
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('imagenes', file);
-    });
-    
-    const token = getToken();
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+  imagenes: async (files: File[]): Promise<ApiResponse<Array<{
+    url: string;
+    cloudinary_id: string;
+  }>>> => {
+    try {
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('imagenes', file);
+      });
+
+      const response = await apiClient.post('/upload/imagenes', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return { success: true, data: response.data.imagenes };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al subir imágenes');
+      }
+      throw new Error('Error de conexión');
     }
-    
-    const url = folder ? `${API_URL}/upload/imagenes?folder=${folder}` : `${API_URL}/upload/imagenes`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    return handleResponse(response);
   },
 
   /**
-   * Elimina una imagen de Cloudinary
-   * Requiere autenticación
-   * 
-   * @param cloudinary_id - ID de la imagen en Cloudinary
-   * @returns Promesa con confirmación
-   * 
-   * @example
-   * await api.upload.delete('nilhub/productos/abc123');
+   * Eliminar imagen (requiere auth)
    */
-  delete: async (cloudinary_id: string): Promise<ApiResponse<Record<string, never>>> => {
-    const response = await fetch(`${API_URL}/upload/${cloudinary_id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    return handleResponse(response);
+  delete: async (cloudinary_id: string): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.delete(`/upload/${cloudinary_id}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al eliminar imagen');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+};
+
+// ===================================
+// API: ADMIN
+// ===================================
+
+export const admin = {
+  /**
+   * Obtener estadísticas globales (requiere rol admin)
+   */
+  getStats: async (): Promise<ApiResponse<{
+    usuarios: number;
+    vendedores: number;
+    tiendas: number;
+    tiendas_activas: number;
+    productos: number;
+    productos_activos: number;
+  }>> => {
+    try {
+      const response = await apiClient.get('/admin/stats');
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener estadísticas');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Obtener todos los usuarios (requiere rol admin)
+   */
+  getUsuarios: async (): Promise<ApiResponse<Usuario[]>> => {
+    try {
+      const response = await apiClient.get('/admin/usuarios');
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener usuarios');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Obtener todas las tiendas (requiere rol admin)
+   */
+  getTiendas: async (): Promise<ApiResponse<Tienda[]>> => {
+    try {
+      const response = await apiClient.get('/admin/tiendas');
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al obtener tiendas');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Activar/Desactivar tienda (requiere rol admin)
+   */
+  toggleTienda: async (id: string): Promise<ApiResponse<Tienda>> => {
+    try {
+      const response = await apiClient.put(`/admin/tiendas/${id}/toggle`);
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al cambiar estado de tienda');
+      }
+      throw new Error('Error de conexión');
+    }
+  },
+
+  /**
+   * Eliminar usuario (requiere rol admin)
+   */
+  deleteUsuario: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+    try {
+      const response = await apiClient.delete(`/admin/usuarios/${id}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new Error(error.response?.data?.error || 'Error al eliminar usuario');
+      }
+      throw new Error('Error de conexión');
+    }
   },
 };
 
@@ -572,27 +592,12 @@ export const upload = {
 // EXPORT DEFAULT
 // ===================================
 
-/**
- * Cliente API completo para NilHub
- * 
- * @example
- * import api from '@/lib/api';
- * 
- * // Autenticación
- * await api.auth.login(email, password);
- * 
- * // Productos
- * const productos = await api.productos.getMisProductos();
- * 
- * // Tiendas
- * const tienda = await api.tiendas.getBySlug('mi-tienda');
- */
 const api = {
   auth,
   productos,
   tiendas,
   upload,
-  stats,
+  admin,
 };
 
 export default api;

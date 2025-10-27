@@ -1,3 +1,10 @@
+// fronted/src/app/admin/page.tsx
+/**
+ * @fileoverview Dashboard principal del panel de administración
+ * Adaptativo: muestra estadísticas globales para admin o de tienda para vendedor
+ * @module AdminDashboard
+ */
+
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,13 +19,24 @@ import {
   Plus,
   ArrowRight,
   Sparkles,
-  Loader2
+  Loader2,
+  Users,
+  Store,
+  ShoppingBag,
+  Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import api, { Producto } from '@/lib/api';
+import api, { Producto, Tienda } from '@/lib/api';
 
-interface Stats {
+// ===================================
+// INTERFACES
+// ===================================
+
+/**
+ * Estadísticas de una tienda (para vendedor)
+ */
+interface StatsVendedor {
   total_productos: number;
   total_visitas: number;
   clicks_whatsapp: number;
@@ -26,16 +44,67 @@ interface Stats {
   ultimos_productos: Producto[];
 }
 
+/**
+ * Estadísticas globales (para admin)
+ */
+interface StatsAdmin {
+  usuarios: number;
+  vendedores: number;
+  tiendas: number;
+  tiendas_activas: number;
+  productos: number;
+  productos_activos: number;
+}
+
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Dashboard adaptativo según rol del usuario
+ * - Admin: Estadísticas globales de la plataforma
+ * - Vendedor: Estadísticas de su tienda
+ */
 export default function AdminDashboard() {
-  const { tienda } = useAuth();
-  const [stats, setStats] = useState<Stats | null>(null);
+  const { usuario, tienda, isAdmin } = useAuth();
+  
+  // Estados
+  const [statsVendedor, setStatsVendedor] = useState<StatsVendedor | null>(null);
+  const [statsAdmin, setStatsAdmin] = useState<StatsAdmin | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    cargarEstadisticas();
-  }, []);
+    if (isAdmin) {
+      cargarEstadisticasAdmin();
+    } else {
+      cargarEstadisticasVendedor();
+    }
+  }, [isAdmin]);
 
-  const cargarEstadisticas = async () => {
+  /**
+   * Carga estadísticas globales para administrador
+   */
+  const cargarEstadisticasAdmin = async () => {
+    try {
+      setLoading(true);
+      
+      // Llamar al endpoint de stats del admin
+      const response = await api.admin.getStats();
+      
+      if (response.success) {
+        setStatsAdmin(response.data);
+      }
+    } catch (error) {
+      console.error('Error al cargar estadísticas admin:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Carga estadísticas de la tienda del vendedor
+   */
+  const cargarEstadisticasVendedor = async () => {
     try {
       setLoading(true);
       
@@ -53,7 +122,7 @@ export default function AdminDashboard() {
         // Obtener últimos 3 productos
         const ultimos_productos = productos.slice(0, 3);
         
-        setStats({
+        setStatsVendedor({
           total_productos: productos.length,
           total_visitas,
           clicks_whatsapp,
@@ -62,16 +131,11 @@ export default function AdminDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error al cargar estadísticas:', error);
+      console.error('Error al cargar estadísticas vendedor:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  // Calcular tasa de conversión de forma segura
-  const tasaConversion = stats?.total_visitas && stats?.clicks_whatsapp
-    ? ((stats.clicks_whatsapp / stats.total_visitas) * 100).toFixed(1)
-    : '0';
 
   // Mostrar loading
   if (loading) {
@@ -84,6 +148,203 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  // Renderizar dashboard según rol
+  return isAdmin ? <DashboardAdmin stats={statsAdmin} /> : <DashboardVendedor stats={statsVendedor} tienda={tienda} />;
+}
+
+// ===================================
+// DASHBOARD ADMINISTRADOR
+// ===================================
+
+/**
+ * Dashboard para usuarios administradores
+ * Muestra estadísticas globales de la plataforma
+ */
+function DashboardAdmin({ stats }: { stats: StatsAdmin | null }) {
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              Panel de Administración
+            </h1>
+            <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+              <Shield className="h-3 w-3 mr-1" />
+              Admin
+            </Badge>
+          </div>
+          <p className="text-slate-600">
+            Vista global de la plataforma NilHub
+          </p>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Total Usuarios */}
+        <Card className="border-2 border-transparent hover:border-blue-200 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-600">
+                Total Usuarios
+              </CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-slate-900">
+              {stats?.usuarios || 0}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              {stats?.vendedores || 0} vendedores registrados
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Total Tiendas */}
+        <Card className="border-2 border-transparent hover:border-purple-200 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-600">
+                Total Tiendas
+              </CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                <Store className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-slate-900">
+              {stats?.tiendas || 0}
+            </div>
+            <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-green-600"></span>
+              {stats?.tiendas_activas || 0} activas
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Total Productos */}
+        <Card className="border-2 border-transparent hover:border-pink-200 transition-all duration-300 hover:shadow-lg hover:shadow-pink-500/10">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-600">
+                Total Productos
+              </CardTitle>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
+                <ShoppingBag className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-slate-900">
+              {stats?.productos || 0}
+            </div>
+            <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-green-600"></span>
+              {stats?.productos_activos || 0} activos
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Accesos rápidos */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Link href="/admin/usuarios">
+          <Card className="hover:shadow-lg transition-all cursor-pointer group">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
+                  <Users className="h-6 w-6 text-blue-600 group-hover:text-white transition-colors" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Gestionar Usuarios</p>
+                  <p className="text-xs text-slate-500">Ver todos los usuarios</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/tiendas">
+          <Card className="hover:shadow-lg transition-all cursor-pointer group">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-500 transition-colors">
+                  <Store className="h-6 w-6 text-purple-600 group-hover:text-white transition-colors" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Gestionar Tiendas</p>
+                  <p className="text-xs text-slate-500">Ver todas las tiendas</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/productos">
+          <Card className="hover:shadow-lg transition-all cursor-pointer group">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg bg-pink-100 flex items-center justify-center group-hover:bg-pink-500 transition-colors">
+                  <ShoppingBag className="h-6 w-6 text-pink-600 group-hover:text-white transition-colors" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Ver Productos</p>
+                  <p className="text-xs text-slate-500">Todos los productos</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* Info Banner */}
+      <Card className="border-0 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 text-white">
+        <CardContent className="relative p-8">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2"></div>
+          </div>
+          
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="h-6 w-6" />
+              <Badge className="bg-white/20 text-white border-white/30">
+                Admin
+              </Badge>
+            </div>
+            <h3 className="text-2xl font-bold mb-2">
+              Administración de NilHub
+            </h3>
+            <p className="text-white/90 max-w-2xl">
+              Tienes acceso completo a la plataforma. Gestiona usuarios, tiendas y productos. 
+              Recuerda mantener la calidad del contenido y moderar cuando sea necesario.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ===================================
+// DASHBOARD VENDEDOR
+// ===================================
+
+/**
+ * Dashboard para vendedores
+ * Muestra estadísticas de su tienda
+ */
+function DashboardVendedor({ stats, tienda }: { stats: StatsVendedor | null; tienda: Tienda | null }) {
+  // Calcular tasa de conversión de forma segura
+  const tasaConversion = stats?.total_visitas && stats?.clicks_whatsapp
+    ? ((stats.clicks_whatsapp / stats.total_visitas) * 100).toFixed(1)
+    : '0';
 
   return (
     <div className="space-y-8">
@@ -300,7 +561,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Botón editar */}
-                  <Link href={`/admin/productos/editar/${producto._id}`}>
+                  <Link href={`/admin/productos/${producto._id}`}>
                     <Button variant="outline" size="sm">
                       Editar
                     </Button>

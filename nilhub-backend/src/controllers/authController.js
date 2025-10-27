@@ -18,19 +18,6 @@ const normalizarEmail = (email) => {
  * @route   POST /api/auth/registro
  * @desc    Registra un nuevo usuario y crea su tienda
  * @access  Public
- * 
- * @param {Object} req.body
- * @param {string} req.body.nombre - Nombre del usuario
- * @param {string} req.body.email - Email único
- * @param {string} req.body.password - Contraseña (min 6 caracteres)
- * @param {string} req.body.nombreTienda - Nombre de la tienda
- * @param {string} req.body.whatsapp - Número de WhatsApp (8-15 dígitos)
- * @param {string} req.body.instagram - Usuario de Instagram (opcional)
- * @param {string} req.body.facebook - URL de Facebook (opcional)
- * 
- * @returns {Object} 201 - Usuario y tienda creados, token JWT
- * @returns {Object} 400 - Email ya existe o validación fallida
- * @returns {Object} 500 - Error del servidor
  */
 const registro = async (req, res) => {
   try {
@@ -80,7 +67,7 @@ const registro = async (req, res) => {
           _id: usuario._id,
           nombre: usuario.nombre,
           email: usuario.email,
-          role: usuario.role
+          rol: usuario.rol  // ✅ CORREGIDO: role → rol
         },
         tienda: {
           _id: tienda._id,
@@ -114,14 +101,6 @@ const registro = async (req, res) => {
  * @route   POST /api/auth/login
  * @desc    Inicia sesión con email y contraseña
  * @access  Public
- * 
- * @param {Object} req.body
- * @param {string} req.body.email - Email del usuario
- * @param {string} req.body.password - Contraseña
- * 
- * @returns {Object} 200 - Usuario autenticado, token JWT
- * @returns {Object} 401 - Credenciales inválidas o usuario inactivo
- * @returns {Object} 500 - Error del servidor
  */
 const login = async (req, res) => {
   try {
@@ -158,13 +137,13 @@ const login = async (req, res) => {
       });
     }
 
-    // Obtener tienda del usuario
+    // Obtener tienda del usuario (puede ser null si es admin)
     const tienda = await Tienda.findOne({ usuario_id: usuario._id });
 
     // Generar token JWT
     const token = generarToken(usuario._id);
 
-    console.log(`✅ Login exitoso: ${usuario.email}`);
+    console.log(`✅ Login exitoso: ${usuario.email} | Rol: ${usuario.rol}`);
 
     res.json({
       success: true,
@@ -173,7 +152,7 @@ const login = async (req, res) => {
           _id: usuario._id,
           nombre: usuario.nombre,
           email: usuario.email,
-          role: usuario.role
+          rol: usuario.rol  // ✅ CORREGIDO: role → rol
         },
         tienda: tienda ? {
           _id: tienda._id,
@@ -197,11 +176,6 @@ const login = async (req, res) => {
  * @route   GET /api/auth/me
  * @desc    Obtiene el usuario actual autenticado
  * @access  Private (requiere JWT)
- * 
- * @param {Object} req.usuario - Usuario del JWT (middleware auth)
- * 
- * @returns {Object} 200 - Usuario y tienda
- * @returns {Object} 500 - Error del servidor
  */
 const obtenerUsuarioActual = async (req, res) => {
   try {
