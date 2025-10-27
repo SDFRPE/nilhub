@@ -1,4 +1,10 @@
-// src/app/[tienda]/page.tsx - VERSIÓN CORREGIDA
+// src/app/[tienda]/page.tsx
+/**
+ * @fileoverview Página de catálogo público de tienda
+ * Muestra productos con filtros, búsqueda y acceso por WhatsApp
+ * @module CatalogoPage
+ */
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -16,15 +22,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 
-// Skeleton loaders
+// ===================================
+// SKELETON LOADERS
+// ===================================
+
+/**
+ * Card skeleton para estado de carga
+ * Muestra un placeholder animado mientras cargan los productos
+ * @private
+ */
 function SkeletonCard() {
   return (
     <Card className="overflow-hidden bg-white/60 backdrop-blur-md border-2 border-white/20 animate-in fade-in duration-500">
       <CardContent className="p-0">
+        {/* Área de imagen con shimmer */}
         <div className="aspect-square bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 relative overflow-hidden">
           <div className="absolute inset-0 -translate-x-full animate-shimmer 
                         bg-gradient-to-r from-transparent via-white/60 to-transparent" />
         </div>
+        {/* Placeholder de texto */}
         <div className="p-4 space-y-3">
           <div className="h-3 bg-slate-200 rounded-full w-1/3 animate-pulse" />
           <div className="h-5 bg-slate-200 rounded-full w-full animate-pulse" />
@@ -36,6 +52,11 @@ function SkeletonCard() {
   );
 }
 
+/**
+ * Grid de skeletons para estado de carga
+ * Muestra 6 cards de placeholder
+ * @private
+ */
 function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -46,29 +67,80 @@ function SkeletonGrid() {
   );
 }
 
-// Componente principal
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Página de catálogo público de una tienda
+ * 
+ * Permite a los clientes:
+ * - Ver todos los productos de una tienda
+ * - Filtrar por categoría
+ * - Buscar productos por texto
+ * - Ver detalles de cada producto
+ * - Contactar por WhatsApp
+ * 
+ * Estados manejados:
+ * - **Loading**: Muestra skeletons mientras carga
+ * - **Error**: Tienda no encontrada
+ * - **Empty**: Tienda sin productos
+ * - **Success**: Grid de productos con filtros
+ * 
+ * Funcionalidades:
+ * - Filtrado client-side por categoría
+ * - Búsqueda client-side por nombre/descripción/marca
+ * - Contadores dinámicos por categoría
+ * - Responsive (sidebar en desktop, horizontal en mobile)
+ * - Botón WhatsApp flotante
+ * 
+ * @returns Página de catálogo renderizada
+ * 
+ * @example
+ * // Ruta dinámica: /[tienda]
+ * // URL: https://nilhub.xyz/cosmeticos-mary
+ */
 export default function CatalogoPage() {
   const params = useParams();
   const tiendaSlug = params.tienda as string;
 
-  // Estados
+  // ===================================
+  // ESTADOS DE DATOS
+  // ===================================
+  
+  /** Datos de la tienda */
   const [tienda, setTienda] = useState<Tienda | null>(null);
+  /** Array de productos de la tienda */
   const [productos, setProductos] = useState<Producto[]>([]);
+  /** Estado de carga inicial */
   const [loading, setLoading] = useState(true);
+  /** Mensaje de error si falla la carga */
   const [error, setError] = useState('');
 
-  // Estados UI
+  // ===================================
+  // ESTADOS DE UI
+  // ===================================
+  
+  /** Categoría actualmente seleccionada */
   const [categoria, setCategoria] = useState('todas');
+  /** Texto de búsqueda actual */
   const [busqueda, setBusqueda] = useState('');
 
-  // ✅ CARGAR DATOS - SECCIÓN CORREGIDA
+  // ===================================
+  // CARGA DE DATOS
+  // ===================================
+  
+  /**
+   * Efecto para cargar datos de tienda y productos
+   * Se ejecuta al montar el componente y cuando cambia el slug
+   */
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError('');
 
       try {
-        // Cargar tienda
+        // 1. Cargar datos de la tienda
         const tiendaResponse = await api.tiendas.getBySlug(tiendaSlug);
 
         if (!tiendaResponse.success || !tiendaResponse.data) {
@@ -78,24 +150,19 @@ export default function CatalogoPage() {
 
         setTienda(tiendaResponse.data);
 
-        // Cargar productos
+        // 2. Cargar productos de la tienda
         const productosResponse = await api.tiendas.getProductos(tiendaSlug);
 
         if (productosResponse.success) {
-          // ✅ FIX: Type guard para manejar ambos formatos
           const data = productosResponse.data;
 
-          // Verificar si es un array directamente
+          // Type guard para manejar diferentes formatos de respuesta
           if (Array.isArray(data)) {
             setProductos(data);
-          }
-          // Verificar si es un objeto con propiedad 'productos'
-          else if (data && typeof data === 'object' && 'productos' in data) {
+          } else if (data && typeof data === 'object' && 'productos' in data) {
             const dataWithProductos = data as { productos: Producto[] };
             setProductos(dataWithProductos.productos || []);
-          }
-          // Fallback: array vacío
-          else {
+          } else {
             console.warn('Formato de respuesta inesperado:', data);
             setProductos([]);
           }
@@ -115,29 +182,42 @@ export default function CatalogoPage() {
     loadData();
   }, [tiendaSlug]);
 
-  // Filtrar productos
+  // ===================================
+  // LÓGICA DE FILTRADO
+  // ===================================
+  
+  /**
+   * Productos filtrados por categoría y búsqueda
+   * Memoizado para evitar recálculos innecesarios
+   */
   const productosFiltrados = useMemo(() => {
-    // ✅ Asegurar que productos sea un array antes de filtrar
+    // Validar que productos sea un array
     if (!Array.isArray(productos)) {
       console.warn('productos no es un array:', productos);
       return [];
     }
 
     return productos.filter((producto) => {
+      // Filtro por categoría
       const pasaCategoria = categoria === 'todas' || producto.categoria === categoria;
+      
+      // Filtro por búsqueda (nombre, descripción, marca)
       const terminoBusqueda = busqueda.toLowerCase();
       const pasaBusqueda = !busqueda ||
         producto.nombre.toLowerCase().includes(terminoBusqueda) ||
         producto.descripcion?.toLowerCase().includes(terminoBusqueda) ||
         producto.marca?.toLowerCase().includes(terminoBusqueda);
 
+      // Solo productos activos
       return pasaCategoria && pasaBusqueda && producto.activo;
     });
   }, [productos, categoria, busqueda]);
 
-  // Contadores por categoría
+  /**
+   * Contadores de productos por categoría
+   * Para mostrar en los filtros
+   */
   const contadores = useMemo(() => {
-    // ✅ Asegurar que productos sea un array
     if (!Array.isArray(productos)) {
       return { todas: 0 };
     }
@@ -155,12 +235,17 @@ export default function CatalogoPage() {
     return counts;
   }, [productos]);
 
+  /** Mensaje pre-formateado para WhatsApp */
   const mensajeWhatsApp = tienda ? generarMensajeGeneral(tienda.nombre) : '';
 
-  // Loading state
+  // ===================================
+  // ESTADO: LOADING
+  // ===================================
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+        {/* Background animado */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-0 -left-4 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob" />
           <div className="absolute top-0 -right-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000" />
@@ -168,6 +253,7 @@ export default function CatalogoPage() {
         </div>
 
         <div className="relative">
+          {/* Skeleton del header */}
           <div className="container mx-auto px-4 py-16">
             <div className="flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
               <div className="flex-shrink-0">
@@ -181,6 +267,7 @@ export default function CatalogoPage() {
             </div>
           </div>
 
+          {/* Skeleton del contenido */}
           <div className="container mx-auto px-4 py-8">
             <div className="grid lg:grid-cols-[320px_1fr] gap-8 max-w-7xl mx-auto">
               <aside className="space-y-6">
@@ -202,12 +289,16 @@ export default function CatalogoPage() {
     );
   }
 
-  // Error state
+  // ===================================
+  // ESTADO: ERROR
+  // ===================================
+  
   if (error || !tienda) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
         <Card className="max-w-md w-full bg-white/80 backdrop-blur-xl border-2 border-white/20 shadow-2xl">
           <CardContent className="p-8 text-center space-y-6">
+            {/* Ícono de error */}
             <div className="relative">
               <div className="absolute inset-0 bg-red-500/20 rounded-full blur-3xl scale-150" />
               <div className="relative w-24 h-24 mx-auto bg-gradient-to-br from-red-500 to-pink-500 rounded-full flex items-center justify-center">
@@ -235,10 +326,14 @@ export default function CatalogoPage() {
     );
   }
 
-  // Contenido principal
+  // ===================================
+  // RENDER: CONTENIDO PRINCIPAL
+  // ===================================
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
-      {/* Background animado */}
+      
+      {/* Background animado global */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 -left-4 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob" />
         <div className="absolute top-0 -right-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000" />
@@ -246,19 +341,27 @@ export default function CatalogoPage() {
       </div>
 
       <div className="relative">
-        {/* Header */}
+        
+        {/* ===================================
+            HEADER DE LA TIENDA
+            =================================== */}
         <TiendaHeader
           tienda={tienda}
           showBanner={true}
         />
 
-        {/* Layout principal */}
+        {/* ===================================
+            LAYOUT PRINCIPAL
+            =================================== */}
         <div className="container mx-auto px-4 py-8">
           <div className="grid lg:grid-cols-[320px_1fr] gap-8 max-w-7xl mx-auto">
 
-            {/* Sidebar - Desktop */}
+            {/* ===================================
+                SIDEBAR (Desktop)
+                =================================== */}
             <aside className="lg:sticky lg:top-8 lg:h-fit space-y-6">
-              {/* Búsqueda */}
+              
+              {/* Barra de búsqueda */}
               <div className="animate-in fade-in slide-in-from-left duration-500">
                 <SearchBar
                   value={busqueda}
@@ -277,7 +380,7 @@ export default function CatalogoPage() {
                 />
               </div>
 
-              {/* Card de info */}
+              {/* Card informativa */}
               <Card className="hidden lg:block bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-white/50 backdrop-blur-md">
                 <CardContent className="p-6 space-y-3">
                   <div className="flex items-center gap-2">
@@ -291,8 +394,11 @@ export default function CatalogoPage() {
               </Card>
             </aside>
 
-            {/* Contenido principal */}
+            {/* ===================================
+                CONTENIDO PRINCIPAL
+                =================================== */}
             <main className="space-y-6">
+              
               {/* Filtros horizontales - Solo mobile */}
               <div className="lg:hidden animate-in fade-in slide-in-from-bottom duration-500">
                 <CategoryFilter
@@ -303,7 +409,7 @@ export default function CatalogoPage() {
                 />
               </div>
 
-              {/* Barra de información */}
+              {/* Barra de información de resultados */}
               <div className="flex items-center justify-between gap-4 animate-in fade-in duration-700">
                 <div className="flex-1">
                   {busqueda || categoria !== 'todas' ? (
@@ -324,7 +430,9 @@ export default function CatalogoPage() {
                 </div>
               </div>
 
-              {/* Grid de productos */}
+              {/* ===================================
+                  GRID DE PRODUCTOS
+                  =================================== */}
               <div className="animate-in fade-in slide-in-from-bottom duration-700 delay-200">
                 <ProductGrid
                   productos={productosFiltrados}
@@ -340,7 +448,9 @@ export default function CatalogoPage() {
                 />
               </div>
 
-              {/* Estado vacío */}
+              {/* ===================================
+                  ESTADO VACÍO GLOBAL
+                  =================================== */}
               {productos.length === 0 && !loading && (
                 <Card className="bg-white/60 backdrop-blur-md border-2 border-white/30">
                   <CardContent className="p-16 text-center space-y-6">
@@ -364,7 +474,9 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        {/* WhatsApp flotante */}
+        {/* ===================================
+            BOTÓN WHATSAPP FLOTANTE
+            =================================== */}
         <WhatsAppButton
           telefono={tienda.whatsapp}
           mensaje={mensajeWhatsApp}

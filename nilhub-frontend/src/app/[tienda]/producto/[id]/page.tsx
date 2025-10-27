@@ -1,3 +1,10 @@
+// fronted/src/app/[tienda]/producto/[id]/page.tsx
+/**
+ * @fileoverview Página de detalle de producto
+ * Vista completa de un producto con galería, información y WhatsApp
+ * @module ProductoDetallePage
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,19 +19,74 @@ import WhatsAppButton, { generarMensajeProducto } from '@/components/common/What
 import { Producto, Tienda } from '@/types';
 import api from '@/lib/api';
 
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Página de detalle de un producto específico
+ * 
+ * Muestra información completa de un producto:
+ * - Galería de imágenes navegable
+ * - Nombre, marca, categoría
+ * - Precios (con descuento si aplica)
+ * - Descripción detallada
+ * - Ingredientes y peso (si están disponibles)
+ * - Estado de stock
+ * - Botón de WhatsApp con mensaje pre-formateado
+ * - Productos relacionados (misma categoría)
+ * 
+ * Estados manejados:
+ * - **Loading**: Spinner mientras carga
+ * - **Error**: Producto no encontrado
+ * - **Success**: Detalle completo del producto
+ * 
+ * Funcionalidades:
+ * - Carga de datos desde API
+ * - Registro de analytics (click en WhatsApp)
+ * - Productos relacionados por categoría
+ * - Navegación de regreso al catálogo
+ * 
+ * @returns Página de detalle renderizada
+ * 
+ * @example
+ * // Ruta dinámica: /[tienda]/producto/[id]
+ * // URL: https://nilhub.xyz/cosmeticos-mary/producto/507f1f77bcf86cd799439011
+ */
 export default function ProductoDetallePage() {
   const params = useParams();
   const tiendaSlug = params.tienda as string;
   const productoId = params.id as string;
 
-  // Estados
+  // ===================================
+  // ESTADOS
+  // ===================================
+  
+  /** Datos de la tienda */
   const [tienda, setTienda] = useState<Tienda | null>(null);
+  /** Datos del producto actual */
   const [producto, setProducto] = useState<Producto | null>(null);
+  /** Productos relacionados (misma categoría) */
   const [productosRelacionados, setProductosRelacionados] = useState<Producto[]>([]);
+  /** Estado de carga inicial */
   const [loading, setLoading] = useState(true);
+  /** Mensaje de error si falla */
   const [error, setError] = useState('');
 
-  // Cargar datos
+  // ===================================
+  // CARGA DE DATOS
+  // ===================================
+  
+  /**
+   * Efecto para cargar todos los datos necesarios
+   * 
+   * Flujo:
+   * 1. Cargar datos de la tienda por slug
+   * 2. Cargar datos del producto por ID
+   * 3. Cargar productos relacionados (misma categoría, diferentes ID)
+   * 
+   * Se ejecuta al montar y cuando cambian los parámetros
+   */
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -47,16 +109,16 @@ export default function ProductoDetallePage() {
         }
         setProducto(productoResponse.data);
 
-        // 3. Cargar productos de la tienda para encontrar relacionados
+        // 3. Cargar productos relacionados
         const productosResponse = await api.tiendas.getProductos(tiendaSlug, {
           categoria: productoResponse.data.categoria
         });
         
         if (productosResponse.success) {
-          // Filtrar: misma categoría, diferente ID, activos
+          // Filtrar: misma categoría, diferente ID, solo activos
           const relacionados = productosResponse.data
             .filter(p => p._id !== productoId && p.activo)
-            .slice(0, 3);
+            .slice(0, 3); // Máximo 3 relacionados
           
           setProductosRelacionados(relacionados);
         }
@@ -72,7 +134,15 @@ export default function ProductoDetallePage() {
     loadData();
   }, [tiendaSlug, productoId]);
 
-  // Registrar click de WhatsApp
+  // ===================================
+  // HANDLERS
+  // ===================================
+  
+  /**
+   * Registra el click en WhatsApp para analytics
+   * Se ejecuta antes de abrir WhatsApp
+   * @private
+   */
   const handleWhatsAppClick = async () => {
     if (!producto) return;
 
@@ -80,10 +150,14 @@ export default function ProductoDetallePage() {
       await api.productos.clickWhatsApp(producto._id);
     } catch (error) {
       console.error('Error al registrar click:', error);
+      // No interrumpir el flujo aunque falle el analytics
     }
   };
 
-  // Loading state
+  // ===================================
+  // ESTADO: LOADING
+  // ===================================
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center">
@@ -95,7 +169,10 @@ export default function ProductoDetallePage() {
     );
   }
 
-  // Error state - Producto no encontrado
+  // ===================================
+  // ESTADO: ERROR
+  // ===================================
+  
   if (error || !producto || !tienda) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center p-4">
@@ -117,20 +194,29 @@ export default function ProductoDetallePage() {
     );
   }
 
-  // Calcular descuento
+  // ===================================
+  // CÁLCULOS
+  // ===================================
+  
+  /** Porcentaje de descuento si hay precio de oferta */
   const descuento = producto.precio_oferta 
     ? Math.round(((producto.precio - producto.precio_oferta) / producto.precio) * 100)
     : 0;
 
-  // Mensaje de WhatsApp
+  /** Mensaje pre-formateado para WhatsApp */
   const mensajeWhatsApp = generarMensajeProducto(
     producto.nombre,
     producto.precio,
     producto.precio_oferta
   );
 
+  // ===================================
+  // RENDER: CONTENIDO PRINCIPAL
+  // ===================================
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      
       {/* Background con blobs animados */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 -left-4 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
@@ -139,7 +225,10 @@ export default function ProductoDetallePage() {
       </div>
 
       <div className="relative">
-        {/* Breadcrumb / Volver */}
+        
+        {/* ===================================
+            BREADCRUMB / NAVEGACIÓN
+            =================================== */}
         <div className="container mx-auto px-4 pt-6">
           <Link 
             href={`/${tiendaSlug}`}
@@ -150,10 +239,15 @@ export default function ProductoDetallePage() {
           </Link>
         </div>
 
-        {/* Contenido principal */}
+        {/* ===================================
+            CONTENIDO PRINCIPAL
+            =================================== */}
         <div className="container mx-auto px-4 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-            {/* Columna izquierda: Galería */}
+            
+            {/* ===================================
+                COLUMNA IZQUIERDA: GALERÍA
+                =================================== */}
             <div>
               <ProductGallery 
                 imagenes={producto.imagenes}
@@ -161,8 +255,11 @@ export default function ProductoDetallePage() {
               />
             </div>
 
-            {/* Columna derecha: Información */}
+            {/* ===================================
+                COLUMNA DERECHA: INFORMACIÓN
+                =================================== */}
             <div className="space-y-6">
+              
               {/* Marca */}
               {producto.marca && (
                 <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
@@ -198,25 +295,32 @@ export default function ProductoDetallePage() {
                 )}
               </div>
 
-              {/* Precios */}
+              {/* ===================================
+                  PRECIOS
+                  =================================== */}
               <div className="flex items-end gap-3">
                 {producto.precio_oferta ? (
                   <>
+                    {/* Precio con descuento */}
                     <span className="text-4xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">
                       S/ {producto.precio_oferta.toFixed(2)}
                     </span>
+                    {/* Precio original tachado */}
                     <span className="text-xl text-slate-400 line-through pb-1">
                       S/ {producto.precio.toFixed(2)}
                     </span>
                   </>
                 ) : (
+                  /* Precio normal */
                   <span className="text-4xl font-bold text-slate-900">
                     S/ {producto.precio.toFixed(2)}
                   </span>
                 )}
               </div>
 
-              {/* Descripción */}
+              {/* ===================================
+                  DESCRIPCIÓN
+                  =================================== */}
               {producto.descripcion && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
@@ -229,10 +333,14 @@ export default function ProductoDetallePage() {
                 </div>
               )}
 
-              {/* Detalles adicionales */}
+              {/* ===================================
+                  DETALLES ADICIONALES
+                  =================================== */}
               {(producto.ingredientes || producto.peso) && (
                 <Card className="bg-white/60 backdrop-blur-md border-2 border-white/30">
                   <CardContent className="p-6 space-y-4">
+                    
+                    {/* Ingredientes */}
                     {producto.ingredientes && (
                       <div className="space-y-2">
                         <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
@@ -245,6 +353,7 @@ export default function ProductoDetallePage() {
                       </div>
                     )}
 
+                    {/* Peso/Contenido */}
                     {producto.peso && (
                       <div className="space-y-2">
                         <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
@@ -260,7 +369,9 @@ export default function ProductoDetallePage() {
                 </Card>
               )}
 
-              {/* Botón de WhatsApp grande con registro de click */}
+              {/* ===================================
+                  BOTÓN DE WHATSAPP
+                  =================================== */}
               <div onClick={handleWhatsAppClick}>
                 <WhatsAppButton 
                   telefono={tienda.whatsapp}
@@ -270,7 +381,7 @@ export default function ProductoDetallePage() {
                 />
               </div>
 
-              {/* Info adicional */}
+              {/* Mensaje informativo */}
               <div className="p-4 rounded-xl bg-blue-50 border-2 border-blue-100">
                 <p className="text-sm text-blue-800">
                   💬 <span className="font-semibold">¿Tienes dudas?</span> Consúltanos por WhatsApp y te responderemos al instante.
@@ -279,7 +390,9 @@ export default function ProductoDetallePage() {
             </div>
           </div>
 
-          {/* Productos relacionados */}
+          {/* ===================================
+              PRODUCTOS RELACIONADOS
+              =================================== */}
           {productosRelacionados.length > 0 && (
             <div className="mt-16 space-y-6">
               <div className="flex items-center justify-between">
@@ -295,6 +408,7 @@ export default function ProductoDetallePage() {
                 </Link>
               </div>
 
+              {/* Grid de productos relacionados */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {productosRelacionados.map((relacionado) => (
                   <ProductCard

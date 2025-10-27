@@ -1,25 +1,73 @@
-// src/components/tienda/TiendaHeader.tsx - VERSIÓN ULTRA PREMIUM
+// src/components/tienda/TiendaHeader.tsx
+/**
+ * @fileoverview Header principal del catálogo de tienda
+ * Muestra logo, banner, información y redes sociales
+ * @module TiendaHeader
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Instagram, Facebook, Store, MapPin, Phone, Clock } from 'lucide-react';
+import { Instagram, Facebook, Store, Phone } from 'lucide-react';
 import { Tienda } from '@/types';
 import { cn } from '@/lib/utils';
 
+// ===================================
+// TIPOS
+// ===================================
+
+/**
+ * Props del componente TiendaHeader
+ * @interface TiendaHeaderProps
+ */
 interface TiendaHeaderProps {
+  /** Datos de la tienda a mostrar */
   tienda: Tienda;
+  /** Mostrar banner de fondo con parallax (opcional) */
   showBanner?: boolean;
 }
 
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Header principal del catálogo de tienda
+ * 
+ * Características:
+ * - Banner de fondo con efecto parallax (si existe)
+ * - Logo con efecto glow animado
+ * - Badge de estado "Activa"
+ * - Nombre y descripción de la tienda
+ * - Contador de productos
+ * - Botón de contacto rápido por WhatsApp
+ * - Links a redes sociales (Instagram, Facebook)
+ * - Separador decorativo con SVG wave
+ * - Diseño responsive (mobile-first)
+ * 
+ * @param props - Props del componente
+ * @returns Header renderizado
+ * 
+ * @example
+ * <TiendaHeader
+ *   tienda={tiendaData}
+ *   showBanner={true}
+ * />
+ */
 export default function TiendaHeader({ 
   tienda,
   showBanner = true 
 }: TiendaHeaderProps) {
+  
+  /** Posición actual del scroll (para efecto parallax) */
   const [scrollY, setScrollY] = useState(0);
 
-  // Parallax effect
+  /**
+   * Efecto parallax en el banner
+   * Actualiza scrollY al hacer scroll para mover el banner
+   */
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll);
@@ -28,6 +76,7 @@ export default function TiendaHeader({
 
   return (
     <header className="relative overflow-hidden">
+      
       {/* ===================================
           BANNER CON PARALLAX
           =================================== */}
@@ -43,7 +92,7 @@ export default function TiendaHeader({
             className="object-cover"
             priority
           />
-          {/* Overlays graduales */}
+          {/* Overlays oscuros graduales para legibilidad */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-t from-pink-50 via-transparent to-transparent" />
         </div>
@@ -55,26 +104,26 @@ export default function TiendaHeader({
       <div className="relative container mx-auto px-4 pt-16 pb-12">
         <div className="max-w-6xl mx-auto">
           
-          {/* Layout: Logo a la izquierda, Info a la derecha (desktop) */}
-          {/* Layout: Centrado (mobile) */}
+          {/* Layout responsive: columna en mobile, fila en desktop */}
           <div className="flex flex-col lg:flex-row lg:items-start gap-8">
             
             {/* ===================================
-                LOGO ADAPTATIVO (NUEVO)
+                LOGO
                 =================================== */}
             <div className="flex-shrink-0 lg:sticky lg:top-8">
               <div className="relative group">
-                {/* Glow effect animado */}
+                {/* Efecto glow animado con pulse */}
                 <div className="absolute -inset-4 bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 
                               rounded-[2rem] blur-2xl opacity-30 group-hover:opacity-50 
                               transition-opacity duration-500 animate-pulse" />
                 
-                {/* Logo container con borde adaptativo */}
+                {/* Container del logo con glassmorphism */}
                 <div className={cn(
                   "relative bg-white rounded-3xl shadow-2xl overflow-hidden",
                   "transition-all duration-500 group-hover:scale-105"
                 )}>
                   {tienda.logo_url ? (
+                    /* Logo custom */
                     <div className="relative w-32 h-32 sm:w-40 sm:h-40 lg:w-48 lg:h-48">
                       <Image
                         src={tienda.logo_url}
@@ -85,7 +134,7 @@ export default function TiendaHeader({
                       />
                     </div>
                   ) : (
-                    // Fallback gradiente si no hay logo
+                    /* Fallback: gradiente con ícono */
                     <div className="w-32 h-32 sm:w-40 sm:h-40 lg:w-48 lg:h-48 
                                   bg-gradient-to-br from-pink-500 via-purple-500 to-blue-500 
                                   flex items-center justify-center">
@@ -102,7 +151,7 @@ export default function TiendaHeader({
                                 from-transparent via-white/30 to-transparent" />
                 </div>
 
-                {/* Badge de verificación */}
+                {/* Badge de verificación "Activa" */}
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-10">
                   <div className="flex items-center gap-2 px-4 py-1.5 rounded-full 
                                 bg-gradient-to-r from-green-500 to-emerald-500 
@@ -121,7 +170,7 @@ export default function TiendaHeader({
                 =================================== */}
             <div className="flex-1 space-y-6">
               
-              {/* Nombre e info principal */}
+              {/* Nombre y descripción */}
               <div className="space-y-3">
                 <h1 className={cn(
                   "text-4xl sm:text-5xl lg:text-6xl font-black leading-tight",
@@ -132,7 +181,6 @@ export default function TiendaHeader({
                   {tienda.nombre}
                 </h1>
 
-                {/* Descripción */}
                 {tienda.descripcion && (
                   <p className={cn(
                     "text-lg sm:text-xl leading-relaxed max-w-2xl",
@@ -145,9 +193,10 @@ export default function TiendaHeader({
                 )}
               </div>
 
-              {/* Stats quick view */}
+              {/* Stats y acciones rápidas */}
               <div className="flex flex-wrap gap-3">
-                {/* Total productos */}
+                
+                {/* Badge: Total productos */}
                 <div className="px-4 py-2 rounded-xl bg-white/90 backdrop-blur-md 
                               border-2 border-white/50 shadow-lg">
                   <div className="flex items-center gap-2">
@@ -158,7 +207,7 @@ export default function TiendaHeader({
                   </div>
                 </div>
 
-                {/* WhatsApp rápido */}
+                {/* Botón de contacto WhatsApp */}
                 <Link
                   href={`https://wa.me/${tienda.whatsapp}`}
                   target="_blank"
@@ -176,7 +225,9 @@ export default function TiendaHeader({
                 </Link>
               </div>
 
-              {/* Redes sociales - Diseño horizontal mejorado */}
+              {/* ===================================
+                  REDES SOCIALES
+                  =================================== */}
               {(tienda.instagram || tienda.facebook) && (
                 <div className="flex items-center gap-3 pt-2">
                   <span className="text-sm font-semibold text-slate-600 uppercase tracking-wider">
@@ -184,6 +235,7 @@ export default function TiendaHeader({
                   </span>
                   
                   <div className="flex gap-2">
+                    
                     {/* Instagram */}
                     {tienda.instagram && (
                       <Link
@@ -192,6 +244,7 @@ export default function TiendaHeader({
                         rel="noopener noreferrer"
                         className="group relative"
                       >
+                        {/* Efecto glow en hover */}
                         <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 
                                       rounded-xl blur-md opacity-0 group-hover:opacity-70 transition-opacity" />
                         <div className={cn(
@@ -216,6 +269,7 @@ export default function TiendaHeader({
                         rel="noopener noreferrer"
                         className="group relative"
                       >
+                        {/* Efecto glow en hover */}
                         <div className="absolute inset-0 bg-blue-600 
                                       rounded-xl blur-md opacity-0 group-hover:opacity-70 transition-opacity" />
                         <div className={cn(
@@ -238,7 +292,7 @@ export default function TiendaHeader({
       </div>
 
       {/* ===================================
-          SEPARADOR DECORATIVO CON WAVE
+          SEPARADOR DECORATIVO CON WAVE SVG
           =================================== */}
       <div className="relative h-8 -mt-8">
         <svg 

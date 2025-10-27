@@ -1,3 +1,10 @@
+// src/components/tienda/SearchBar.tsx
+/**
+ * @fileoverview Barra de búsqueda con glassmorphism
+ * Input de búsqueda con efectos premium y botón de limpiar
+ * @module SearchBar
+ */
+
 'use client';
 
 import { useState } from 'react';
@@ -5,13 +12,52 @@ import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// ===================================
+// TIPOS
+// ===================================
+
+/**
+ * Props del componente SearchBar
+ * @interface SearchBarProps
+ */
 interface SearchBarProps {
+  /** Valor actual de búsqueda */
   value: string;
+  /** Callback al cambiar el valor */
   onChange: (value: string) => void;
+  /** Placeholder del input (opcional) */
   placeholder?: string;
+  /** Clases CSS adicionales */
   className?: string;
 }
 
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Barra de búsqueda con efectos premium
+ * 
+ * Características:
+ * - Glassmorphism (backdrop-blur)
+ * - Efecto glow animado en focus
+ * - Ícono de búsqueda
+ * - Botón de limpiar (aparece al escribir)
+ * - Texto de ayuda con el término buscado
+ * - Animaciones suaves
+ * 
+ * @param props - Props del componente
+ * @returns Barra de búsqueda renderizada
+ * 
+ * @example
+ * const [busqueda, setBusqueda] = useState('');
+ * 
+ * <SearchBar
+ *   value={busqueda}
+ *   onChange={setBusqueda}
+ *   placeholder="Buscar productos..."
+ * />
+ */
 export default function SearchBar({ 
   value, 
   onChange,
@@ -19,23 +65,33 @@ export default function SearchBar({
   className 
 }: SearchBarProps) {
   
+  /** Estado de focus para animaciones */
   const [isFocused, setIsFocused] = useState(false);
 
-  // Función para limpiar búsqueda
+  /**
+   * Limpia el campo de búsqueda
+   * @private
+   */
   const limpiarBusqueda = () => {
     onChange('');
   };
 
   return (
     <div className={cn("relative group", className)}>
-      {/* Efecto glow cuando está en focus */}
+      
+      {/* ===================================
+          EFECTO GLOW (solo visible en focus)
+          =================================== */}
       <div className={cn(
         "absolute -inset-1 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 rounded-2xl blur-lg opacity-0 transition-opacity duration-300",
         isFocused && "opacity-30"
       )}></div>
 
       <div className="relative">
-        {/* Contenedor del input con glassmorphism */}
+        
+        {/* ===================================
+            INPUT CON GLASSMORPHISM
+            =================================== */}
         <div className={cn(
           "relative flex items-center",
           "bg-white/60 backdrop-blur-xl border-2 rounded-2xl",
@@ -44,7 +100,8 @@ export default function SearchBar({
             ? "border-white/50 bg-white/80 shadow-xl" 
             : "border-white/30 hover:border-white/40"
         )}>
-          {/* Ícono de búsqueda */}
+          
+          {/* Ícono de búsqueda (izquierda) */}
           <div className="absolute left-4 pointer-events-none">
             <Search className={cn(
               "w-5 h-5 transition-colors duration-300",
@@ -52,7 +109,7 @@ export default function SearchBar({
             )} />
           </div>
 
-          {/* Input */}
+          {/* Input principal */}
           <Input
             type="text"
             value={value}
@@ -68,7 +125,10 @@ export default function SearchBar({
             )}
           />
 
-          {/* Botón para limpiar (solo si hay texto) */}
+          {/* ===================================
+              BOTÓN DE LIMPIAR
+              (solo visible si hay texto)
+              =================================== */}
           {value && (
             <button
               onClick={limpiarBusqueda}
@@ -86,7 +146,10 @@ export default function SearchBar({
           )}
         </div>
 
-        {/* Texto de ayuda (opcional - muestra conteo si hay búsqueda) */}
+        {/* ===================================
+            TEXTO DE AYUDA
+            (muestra el término buscado)
+            =================================== */}
         {value && (
           <div className="absolute -bottom-6 left-0 text-xs text-slate-500">
             Buscando: <span className="font-medium text-slate-700">&quot;{value}&quot;</span>

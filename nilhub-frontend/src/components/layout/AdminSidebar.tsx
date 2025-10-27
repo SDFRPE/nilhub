@@ -1,3 +1,10 @@
+// fronted/src/components/layout/AdminSidebar.tsx
+/**
+ * @fileoverview Sidebar de navegación del panel de administración
+ * Menú lateral fijo con navegación, info del usuario y logout
+ * @module AdminSidebar
+ */
+
 'use client';
 
 import Link from 'next/link';
@@ -15,6 +22,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// ===================================
+// CONFIGURACIÓN DEL MENÚ
+// ===================================
+
+/**
+ * Items del menú de navegación
+ * Cada item tiene título, ruta e ícono
+ * @constant
+ */
 const menuItems = [
   {
     title: 'Dashboard',
@@ -33,16 +49,45 @@ const menuItems = [
   },
 ];
 
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Sidebar de navegación para el panel admin
+ * 
+ * Barra lateral fija con:
+ * - Logo y branding
+ * - Información del usuario y tienda
+ * - Menú de navegación con estados activos
+ * - Botón para ver catálogo público
+ * - Botón de cerrar sesión
+ * 
+ * @returns Sidebar renderizado
+ * 
+ * @example
+ * // Usado en layout.tsx del admin
+ * <div className="flex">
+ *   <AdminSidebar />
+ *   <main className="flex-1">
+ *     {children}
+ *   </main>
+ * </div>
+ */
 export default function AdminSidebar() {
   const pathname = usePathname();
   const { usuario, tienda, logout } = useAuth();
 
   return (
     <div className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col">
-      {/* Header con logo */}
+      
+      {/* ===================================
+          HEADER CON LOGO
+          =================================== */}
       <div className="p-6 border-b border-slate-200">
         <Link href="/admin" className="flex items-center gap-2 group">
           <div className="relative">
+            {/* Efecto glow en el ícono */}
             <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg blur-md opacity-50 group-hover:opacity-100 transition-opacity"></div>
             <Store className="relative h-8 w-8 text-pink-500" />
           </div>
@@ -55,9 +100,13 @@ export default function AdminSidebar() {
         </Link>
       </div>
 
-      {/* Info de tienda */}
+      {/* ===================================
+          INFORMACIÓN DE USUARIO Y TIENDA
+          =================================== */}
       <div className="p-4 border-b border-slate-200 bg-gradient-to-br from-pink-50 to-purple-50">
+        {/* Avatar y datos del usuario */}
         <div className="flex items-center gap-3">
+          {/* Avatar con inicial del usuario */}
           <div className="h-10 w-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold">
             {usuario?.nombre.charAt(0).toUpperCase()}
           </div>
@@ -71,7 +120,7 @@ export default function AdminSidebar() {
           </div>
         </div>
         
-        {/* Badge de link público */}
+        {/* Link al catálogo público */}
         {tienda?.slug && (
           <Link 
             href={`/${tienda.slug}`}
@@ -86,9 +135,12 @@ export default function AdminSidebar() {
         )}
       </div>
 
-      {/* Menú de navegación */}
+      {/* ===================================
+          MENÚ DE NAVEGACIÓN
+          =================================== */}
       <nav className="flex-1 p-4 space-y-1">
         {menuItems.map((item) => {
+          // Determinar si la ruta actual coincide con el item
           const isActive = pathname === item.href || 
             (item.href !== '/admin' && pathname.startsWith(item.href));
           
@@ -103,6 +155,7 @@ export default function AdminSidebar() {
                   : "text-slate-700 hover:bg-slate-100"
               )}
             >
+              {/* Ícono con animación de escala */}
               <item.icon className={cn(
                 "h-5 w-5 transition-transform",
                 isActive ? "scale-110" : "group-hover:scale-110"
@@ -113,7 +166,9 @@ export default function AdminSidebar() {
         })}
       </nav>
 
-      {/* Footer con logout */}
+      {/* ===================================
+          FOOTER CON LOGOUT
+          =================================== */}
       <div className="p-4 border-t border-slate-200">
         <Button
           onClick={logout}

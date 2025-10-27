@@ -1,4 +1,10 @@
-// src/components/productos/ProductCard.tsx
+// fronted/src/components/productos/ProductCard.tsx
+/**
+ * @fileoverview Card individual de producto para catálogos
+ * Tarjeta con imagen, info, precios y badges de estado
+ * @module ProductCard
+ */
+
 'use client';
 
 import Image from 'next/image';
@@ -9,27 +15,73 @@ import { Eye, MessageCircle, Sparkles } from 'lucide-react';
 import { Producto } from '@/types';
 import { cn } from '@/lib/utils';
 
+// ===================================
+// TIPOS
+// ===================================
+
+/**
+ * Props del componente ProductCard
+ * @interface ProductCardProps
+ */
 interface ProductCardProps {
+  /** Producto a mostrar */
   producto: Producto;
+  /** Slug de la tienda (para construir la URL) */
   tiendaSlug: string;
-  showStats?: boolean; // Para mostrar vistas/clicks (opcional)
+  /** Mostrar estadísticas de vistas y clicks (opcional) */
+  showStats?: boolean;
 }
 
+// ===================================
+// COMPONENTE PRINCIPAL
+// ===================================
+
+/**
+ * Card de producto con animaciones premium
+ * 
+ * Muestra:
+ * - Imagen del producto (primera del array)
+ * - Badges de descuento, stock y categoría
+ * - Nombre, marca y descripción
+ * - Precios (con descuento si aplica)
+ * - Estadísticas opcionales (vistas/clicks)
+ * - Animaciones en hover
+ * 
+ * Al hacer click, redirige al detalle del producto.
+ * 
+ * @param props - Props del componente
+ * @returns Card de producto renderizado
+ * 
+ * @example
+ * <ProductCard
+ *   producto={producto}
+ *   tiendaSlug="cosmeticos-mary"
+ *   showStats={false}
+ * />
+ */
 export default function ProductCard({ 
   producto, 
   tiendaSlug,
   showStats = false 
 }: ProductCardProps) {
   
-  // Calcular % de descuento si hay precio oferta
+  /**
+   * Calcula el porcentaje de descuento
+   * @private
+   */
   const descuento = producto.precio_oferta 
     ? Math.round(((producto.precio - producto.precio_oferta) / producto.precio) * 100)
     : 0;
 
-  // Imagen principal (primera del array)
+  /** Imagen principal (primera del array o placeholder) */
   const imagenPrincipal = producto.imagenes[0]?.url || '/placeholder-product.jpg';
 
-  // Mapeo de categorías a colores
+  /**
+   * Obtiene el color del gradiente según la categoría
+   * @param categoria - Categoría del producto
+   * @returns Clases de Tailwind para el gradiente
+   * @private
+   */
   const getCategoriaColor = (categoria: string) => {
     const colores: Record<string, string> = {
       'maquillaje': 'from-pink-500 to-rose-500',
@@ -54,13 +106,16 @@ export default function ProductCard({
         "hover:border-white/40",
         !producto.hay_stock && "opacity-70"
       )}>
-        {/* Efecto glow en hover */}
+        {/* Efecto glow animado en hover */}
         <div className="absolute inset-0 bg-gradient-to-br from-pink-500/0 via-purple-500/0 to-blue-500/0 
                       group-hover:from-pink-500/10 group-hover:via-purple-500/10 group-hover:to-blue-500/10 
                       transition-all duration-500 pointer-events-none"></div>
 
         <CardContent className="p-0">
-          {/* Contenedor de imagen */}
+          
+          {/* ===================================
+              IMAGEN DEL PRODUCTO
+              =================================== */}
           <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
             <Image
               src={imagenPrincipal}
@@ -70,13 +125,15 @@ export default function ProductCard({
               sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
             />
 
-            {/* Overlay con gradiente sutil */}
+            {/* Overlay con gradiente en hover */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent 
                           opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
-            {/* Badges superiores */}
+            {/* ===================================
+                BADGES SUPERIORES
+                =================================== */}
             <div className="absolute top-3 left-3 right-3 flex justify-between items-start gap-2 z-10">
-              {/* Badge de descuento */}
+              {/* Badge de descuento (solo si hay oferta) */}
               {producto.precio_oferta && (
                 <Badge className={cn(
                   "bg-gradient-to-r from-red-500 to-pink-500 text-white border-0",
@@ -111,13 +168,17 @@ export default function ProductCard({
               </Badge>
             </div>
 
-            {/* Estadísticas (inferior derecho) - Solo si showStats=true */}
+            {/* ===================================
+                ESTADÍSTICAS (opcional)
+                =================================== */}
             {showStats && (
               <div className="absolute bottom-3 right-3 flex gap-2 z-10">
+                {/* Vistas */}
                 <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-1">
                   <Eye className="w-3 h-3 text-white" />
                   <span className="text-xs text-white font-medium">{producto.vistas}</span>
                 </div>
+                {/* Clicks en WhatsApp */}
                 <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-1">
                   <MessageCircle className="w-3 h-3 text-white" />
                   <span className="text-xs text-white font-medium">{producto.clicks_whatsapp}</span>
@@ -126,8 +187,11 @@ export default function ProductCard({
             )}
           </div>
 
-          {/* Información del producto */}
+          {/* ===================================
+              INFORMACIÓN DEL PRODUCTO
+              =================================== */}
           <div className="p-4 space-y-3">
+            
             {/* Marca (si existe) */}
             {producto.marca && (
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
@@ -143,33 +207,40 @@ export default function ProductCard({
               {producto.nombre}
             </h3>
 
-            {/* Descripción corta */}
+            {/* Descripción corta (truncada a 2 líneas) */}
             {producto.descripcion && (
               <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
                 {producto.descripcion}
               </p>
             )}
 
-            {/* Precios */}
+            {/* ===================================
+                PRECIOS
+                =================================== */}
             <div className="flex items-end gap-2 pt-2">
               {producto.precio_oferta ? (
                 <>
+                  {/* Precio con oferta */}
                   <span className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 
                                  bg-clip-text text-transparent">
                     S/ {producto.precio_oferta.toFixed(2)}
                   </span>
+                  {/* Precio original tachado */}
                   <span className="text-sm text-slate-400 line-through pb-1">
                     S/ {producto.precio.toFixed(2)}
                   </span>
                 </>
               ) : (
+                /* Precio normal */
                 <span className="text-2xl font-bold text-slate-900">
                   S/ {producto.precio.toFixed(2)}
                 </span>
               )}
             </div>
 
-            {/* Botón de acción - aparece en hover */}
+            {/* ===================================
+                BOTÓN DE ACCIÓN (aparece en hover)
+                =================================== */}
             <div className="pt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className={cn(
                 "w-full py-2 px-4 rounded-lg text-center font-medium",
